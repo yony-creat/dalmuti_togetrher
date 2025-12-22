@@ -10,37 +10,44 @@
         body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg-color); color: white; margin: 0; padding: 10px; text-align: center; }
         
         /* 상단 신분 고정 바 */
-        #role-header { background: #2c3e50; padding: 10px; border-radius: 10px; margin-bottom: 10px; border-bottom: 2px solid var(--accent); font-size: 0.9rem; }
+        #role-header { background: #2c3e50; padding: 12px; border-radius: 10px; margin-bottom: 10px; border-bottom: 3px solid var(--accent); font-size: 1rem; font-weight: bold; }
         
         #setup, #role-draw, #tax-phase, #game-board, #round-result-screen { background: rgba(0,0,0,0.5); padding: 20px; border-radius: 15px; max-width: 500px; margin: 10px auto; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 1px solid #34495e; }
         
         .card-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 15px; min-height: 110px; }
-        
-        /* 이미지를 제거하고 숫자만 강조한 카드 스타일 */
         .card { 
             width: 70px; height: 105px; background: white; border-radius: 8px; 
-            border: 2px solid #333; cursor: pointer; overflow: hidden; position: relative; 
-            display: flex; align-items: center; justify-content: center; color: #2c3e50; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            border: 2px solid #333; cursor: pointer; display: flex; align-items: center; 
+            justify-content: center; color: #2c3e50; font-weight: bold;
         }
-        .card-number { font-size: 42px; font-weight: bold; }
+        .card-number { font-size: 42px; }
         
-        .card.selected { transform: translateY(-15px); border-color: var(--accent); box-shadow: 0 0 15px var(--accent); z-index: 10; }
+        .card.selected { transform: translateY(-15px); border: 3px solid var(--accent); box-shadow: 0 0 15px var(--accent); z-index: 10; }
         .card.clickable { border: 3px solid var(--accent); animation: blink 1s infinite; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
         
         button { padding: 12px 20px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; font-size: 16px; width: 85%; }
         input { padding: 12px; width: 85%; border-radius: 5px; border: 2px solid #34495e; font-size: 16px; margin-bottom: 10px; text-align: center; background: #ecf0f1; color: #2c3e50; }
         .hidden { display: none !important; }
+        
         #status-bar { padding: 10px; margin-bottom: 10px; border-radius: 8px; font-size: 14px; background: #c0392b; font-weight: bold; }
         .online { background: #27ae60 !important; }
-        .p-badge { display: inline-block; padding: 5px 12px; margin: 3px; border-radius: 15px; font-size: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid #777; }
-        .active-p { border: 2px solid var(--accent); color: var(--accent); }
+        
+        /* 턴 및 카드 정보 뱃지 */
+        .p-badge { 
+            display: inline-block; padding: 8px 12px; margin: 4px; border-radius: 20px; 
+            font-size: 0.9rem; background: rgba(255,255,255,0.1); border: 1px solid #777; 
+        }
+        .active-p { 
+            border: 3px solid var(--accent); color: var(--accent); background: rgba(241, 196, 15, 0.2); 
+            transform: scale(1.1); font-weight: bold;
+        }
+        #turn-indicator { padding: 10px; border-radius: 10px; background: rgba(52, 152, 219, 0.2); margin-top: 10px; border: 1px solid #3498db; }
     </style>
 </head>
 <body>
     <div id="status-bar">📡 신호기 준비 중...</div>
-
+    
     <div id="role-header" class="hidden">
         👑 달무티: <span id="h-dalmuti">-</span> | 💩 농노: <span id="h-peon">-</span>
     </div>
@@ -53,11 +60,10 @@
             <div id="guest-btns" class="hidden"><button onclick="initGuest()">입장하기</button></div>
         </div>
         <div id="lobby-view" class="hidden">
-            <p style="font-size:12px; color:var(--accent);">🔗 아래 링크를 <b>팀원들에게</b> 공유하세요!</p>
+            <p style="font-size:12px;">🔗 아래 링크를 <b>팀원들에게</b> 공유하세요!</p>
             <button onclick="copyInvite()" style="background:#2980b9; font-size:13px; margin-bottom:15px;">🔗 초대 링크 복사하기</button>
             <div id="player-list" style="margin-bottom:20px;"></div>
             <button id="start-btn" class="hidden" onclick="hostGoDraw()" style="background:#27ae60;">전원 입장! 서열 정하기 시작</button>
-            <p id="guest-msg" class="hidden" style="color:#aaa;">방장이 게임을 시작할 때까지 기다려주세요...</p>
         </div>
     </div>
 
@@ -71,15 +77,15 @@
 
     <div id="tax-phase" class="hidden">
         <h3>💰 세금 납부 및 하사</h3>
-        <div id="tax-msg" style="color:var(--accent); font-weight:bold; margin-bottom:15px;"></div>
+        <div id="tax-msg" style="color:var(--accent); font-weight:bold; margin-bottom:15px; border:1px dashed #777; padding:10px;"></div>
         <div id="tax-hand" class="card-container"></div>
         <button id="tax-submit-btn" onclick="submitTaxClick()">카드 확정</button>
     </div>
 
     <div id="game-board" class="hidden">
         <div id="game-player-status" style="margin-bottom:15px;"></div>
-        <div id="turn-indicator" style="font-size:1.1rem; color:var(--accent); font-weight:bold; margin-bottom:10px;"></div>
-        <div style="min-height:120px; background:rgba(255,255,255,0.05); border-radius:10px; padding:10px;"><div id="table" class="card-container"></div></div>
+        <div id="turn-indicator">누구 차례일까요?</div>
+        <div style="min-height:120px; background:rgba(255,255,255,0.05); border-radius:10px; padding:10px; margin-top:15px;"><div id="table" class="card-container"></div></div>
         <button id="show-btn" onclick="revealHand()">내 카드 확인하기</button>
         <div id="hand-area" class="card-container hidden"></div>
         <div id="actions" class="hidden" style="margin-top:20px;">
@@ -128,9 +134,20 @@
             conns[c.peer] = c; if(!state.players.find(p => p.id === c.peer)) state.players.push({id: c.peer, name: d.name, rankVal: 0, role: '심사중', cards: 0, finished: false});
             updateLobby(); if(state.players.length >= 2) document.getElementById('start-btn').classList.remove('hidden'); sync();
         }
-        if(d.type === 'SYNC') { state = d.state; if(d.hand) myHand = d.hand; refresh(); }
-        if(d.type === 'PICK_REQ') { const p = state.players.find(x => x.id === c.peer); p.rankVal = state.rankDeck.pop(); state.turnIdx++; checkPicked(); }
-        if(d.type === 'TAX_SUBMIT') { state.taxStorage.push({from: d.id, cards: d.cards}); checkTaxDone(); }
+        if(d.type === 'SYNC') { 
+            state = d.state; 
+            if(d.hand) myHand = d.hand; // 참가자는 방장이 보내준 자신의 핸드를 업데이트
+            refresh(); 
+        }
+        if(d.type === 'PICK_REQ') { 
+            const p = state.players.find(x => x.id === c.peer); 
+            p.rankVal = state.rankDeck.pop(); 
+            state.turnIdx++; checkPicked(); 
+        }
+        if(d.type === 'TAX_SUBMIT') { 
+            state.taxStorage.push({from: d.id, cards: d.cards}); 
+            checkTaxDone(); 
+        }
     }
 
     function updateLobby() { document.getElementById('player-list').innerHTML = "참가자: " + state.players.map(p => `<span class="p-badge">${p.name}</span>`).join(''); }
@@ -143,7 +160,6 @@
         if(state.status === 'tax-phase') renderTaxPhase();
         if(state.status === 'game-board') renderGame();
         
-        // 상단 헤더 업데이트 (신분 고정 표시)
         if(state.players.length > 0 && state.status !== 'lobby' && state.players[0].rankVal > 0) {
             const dal = state.players[0], peon = state.players[state.players.length-1];
             document.getElementById('h-dalmuti').innerText = dal.name;
@@ -178,15 +194,18 @@
     function hostStartTaxPhase() {
         let dk = []; for(let i=1; i<=12; i++) for(let j=0; j<i; j++) dk.push(i); dk.push(13, 13); dk.sort(()=>Math.random()-0.5);
         state.status = 'tax-phase'; state.taxStorage = []; state.last = {rank:14, count:0};
-        state.players.forEach((p, i) => { let h = []; for(let j=i; j<dk.length; j+=state.players.length) h.push(dk[j]);
-            p.cards = h.length; p.finished = false; if(p.id === myId) myHand = h; else conns[p.id].send({type: 'SYNC', state, hand: h});
+        state.players.forEach((p, i) => { 
+            let h = []; for(let j=i; j<dk.length; j+=state.players.length) h.push(dk[j]);
+            p.cards = h.length; p.finished = false; 
+            if(p.id === myId) myHand = h; 
+            else conns[p.id].send({type: 'SYNC', state, hand: h}); // 방장이 참가자에게 카드 직접 전송
         }); sync(); refresh();
     }
 
     function renderTaxPhase() {
         const me = state.players.find(p => p.id === myId), dal = state.players[0], peon = state.players[state.players.length-1];
         let m = (me.id === peon.id) ? "💩 농노님, 달무티에게 바칠 가장 좋은 카드 2장을 선택하세요." : 
-                (me.id === dal.id) ? "👑 달무티님, 농노에게 줄 아무 카드 2장을 선택하세요." : "팀원들이 세금을 정하고 있습니다...";
+                (me.id === dal.id) ? "👑 달무티님, 농노에게 줄 아무 카드 2장을 선택하세요." : "다른 팀원들이 세금을 정하고 있습니다...";
         document.getElementById('tax-msg').innerText = m; const div = document.getElementById('tax-hand'); div.innerHTML = "";
         if(me.id === peon.id || me.id === dal.id) {
             myHand.sort((a,b)=>a-b).forEach((r, i) => {
@@ -201,14 +220,14 @@
     function submitTaxClick() {
         if(selected.length !== 2) return alert("반드시 2장을 선택해야 합니다!");
         const me = state.players.find(p => p.id === myId), peon = state.players[state.players.length-1];
-        // 농노 거짓말 탐지 로직
         if(me.id === peon.id) {
             const best = [...myHand].sort((a,b)=>a-b).slice(0,2);
             const selR = selected.map(s => s.r).sort((a,b)=>a-b);
             if(!selR.every((v,i)=>v===best[i])) return alert(`농노여! 어디 감히 거짓을 고하느냐. ${best[0]}번, ${best[1]}번 카드를 내거라.`);
         }
         const cards = selected.map(s => s.r); selected.sort((a,b)=>b.i-a.i).forEach(s => myHand.splice(s.i, 1));
-        if(myRole === 'host') { state.taxStorage.push({from: myId, cards}); checkTaxDone(); } else conns[hostPeerId].send({type: 'TAX_SUBMIT', id: myId, cards});
+        if(myRole === 'host') { state.taxStorage.push({from: myId, cards}); checkTaxDone(); } 
+        else conns[hostPeerId].send({type: 'TAX_SUBMIT', id: myId, cards});
         document.getElementById('tax-phase').innerHTML = "<h3>조공 완료! 대기 중...</h3>";
     }
 
@@ -216,28 +235,37 @@
         if(state.taxStorage.length === 2) {
             const dal = state.players[0], peon = state.players[state.players.length-1];
             const pToD = state.taxStorage.find(x => x.from === peon.id).cards, dToP = state.taxStorage.find(x => x.from === dal.id).cards;
-            state.status = 'game-board'; state.players.forEach(p => {
-                let h = (p.id === myId) ? myHand : [];
+            state.status = 'game-board'; state.turnIdx = 0;
+            state.players.forEach(p => {
+                let h = (p.id === myId) ? [...myHand] : [];
                 if(p.id === dal.id) h = h.concat(pToD); else if(p.id === peon.id) h = h.concat(dToP);
-                if(p.id === myId) myHand = h.sort((a,b)=>a-b); else conns[p.id].send({type: 'SYNC', state, hand: h.sort((a,b)=>a-b)});
+                if(p.id === myId) { myHand = h.sort((a,b)=>a-b); } 
+                else conns[p.id].send({type: 'SYNC', state, hand: h.sort((a,b)=>a-b)}); // 바뀐 카드를 참가자에게 재전송
             }); sync(); refresh();
         }
     }
 
     function renderGame() {
         const turnP = state.players[state.turnIdx];
-        document.getElementById('turn-indicator').innerText = turnP.id === myId ? "⭐ 내 차례!" : `📢 [${turnP.name}] 차례`;
-        // 실시간 카드 장수 표시
+        const indicator = document.getElementById('turn-indicator');
+        indicator.innerText = turnP.id === myId ? "⭐ 당신의 차례입니다! ⭐" : `📢 [${turnP.name}] 님의 차례입니다.`;
+        indicator.style.color = turnP.id === myId ? "var(--accent)" : "white";
+        indicator.className = turnP.id === myId ? "active-p" : "";
+        
         document.getElementById('game-player-status').innerHTML = state.players.map(p => `
             <span class="p-badge ${p.id===turnP.id?'active-p':''}">
                 ${p.role.split(' ')[1]} ${p.name}: <b>🎴${p.finished ? '탈출' : p.cards}</b>
             </span>`).join('');
         const t = document.getElementById('table'); t.innerHTML = "";
         for(let i=0; i<state.last.count; i++) t.innerHTML += `<div class="card"><div class="card-number">${state.last.rank===13?'J':state.last.rank}</div></div>`;
+        
+        document.getElementById('hand-area').classList.add('hidden');
+        document.getElementById('actions').classList.add('hidden');
     }
 
     function revealHand() {
-        const div = document.getElementById('hand-area'); div.innerHTML = ""; div.classList.remove('hidden'); document.getElementById('actions').classList.remove('hidden');
+        const div = document.getElementById('hand-area'); div.innerHTML = ""; div.classList.remove('hidden');
+        document.getElementById('actions').classList.remove('hidden');
         myHand.sort((a,b)=>a-b).forEach((r, i) => {
             const c = document.createElement('div'); c.className = 'card';
             c.innerHTML = `<div class="card-number">${r===13?'J':r}</div>`;
@@ -247,7 +275,8 @@
     }
 
     function playCards() {
-        if(state.players[state.turnIdx].id !== myId) return alert("차례가 아닙니다.");
+        if(state.players[state.turnIdx].id !== myId) return alert("당신의 차례가 아닙니다.");
+        if(selected.length === 0) return;
         const r = selected[0].r;
         if(state.last.count === 0 || (selected.length === state.last.count && r < state.last.rank)) {
             state.last = {rank: r, count: selected.length}; selected.sort((a,b)=>b.i-a.i).forEach(s => myHand.splice(s.i, 1));
@@ -255,10 +284,15 @@
             if(myHand.length === 0) state.players.find(p => p.id === myId).finished = true;
             do { state.turnIdx = (state.turnIdx + 1) % state.players.length; } while(state.players[state.turnIdx].finished);
             sync(); refresh();
-        }
+        } else { alert("낼 수 없는 카드입니다."); }
     }
 
-    function passTurn() { do { state.turnIdx = (state.turnIdx + 1) % state.players.length; } while(state.players[state.turnIdx].finished); sync(); refresh(); }
+    function passTurn() { 
+        if(state.players[state.turnIdx].id !== myId) return alert("당신의 차례가 아닙니다.");
+        do { state.turnIdx = (state.turnIdx + 1) % state.players.length; } while(state.players[state.turnIdx].finished); 
+        sync(); refresh(); 
+    }
+
     function sync() { if(myRole === 'host') Object.values(conns).forEach(c => c.send({type: 'SYNC', state})); }
     function copyInvite() { navigator.clipboard.writeText(window.location.origin + window.location.pathname + "?room=" + myId).then(() => alert("링크 복사 완료!")); }
     function showScreen(id) { ['setup', 'role-draw', 'tax-phase', 'game-board', 'round-result-screen'].forEach(s => document.getElementById(s).classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
