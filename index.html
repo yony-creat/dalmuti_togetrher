@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>달무티 온라인 - 최종 연결 강화판</title>
+    <title>달무티 멀티 - 최종 연결형</title>
     <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <style>
         :root { --bg-color: #1a252f; --accent: #f1c40f; }
@@ -17,13 +17,14 @@
         button { padding: 12px 20px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; font-size: 16px; width: 85%; }
         input { padding: 12px; width: 80%; border-radius: 5px; border: 2px solid #34495e; font-size: 16px; margin-bottom: 15px; text-align: center; background: #ecf0f1; color: #2c3e50; }
         .hidden { display: none; }
-        #status-display { padding: 10px; margin-bottom: 10px; border-radius: 10px; font-size: 14px; background: #c0392b; transition: 0.3s; }
+        .player-tag { background: #2c3e50; padding: 8px 15px; border-radius: 20px; margin: 5px; display: inline-block; border: 1px solid var(--accent); font-weight: bold; }
+        #status-bar { padding: 10px; margin-bottom: 10px; border-radius: 10px; font-size: 14px; background: #c0392b; transition: 0.5s; }
         .online { background: #27ae60 !important; }
     </style>
 </head>
 <body>
-    <h2 style="color:var(--accent)">🏰 달무티</h2>
-    <div id="status-display">🔴 서버 연결 시도 중 (보안망 확인 필요)</div>
+    <h2 style="color:var(--accent)">🏰 달무티 멀티</h2>
+    <div id="status-bar">🔴 서버 연결 중 (사내망 차단 가능성 있음)</div>
 
     <div id="setup-screen" class="screen">
         <div id="create-view">
@@ -39,7 +40,7 @@
     <div id="lobby-screen" class="screen hidden">
         <div style="background: #34495e; padding: 10px; border-radius: 10px; margin-bottom: 15px;">
             🏠 방 코드: <b id="display-room-id" style="color:var(--accent)"></b><br>
-            <small onclick="copyInviteURL()" style="cursor:pointer; color:#aaa;">🔗 초대 링크 복사 (클릭)</small>
+            <small onclick="copyInviteURL()" style="cursor:pointer; color:#aaa; text-decoration: underline;">🔗 초대 링크 복사</small>
         </div>
         <h3>👥 현재 접속 인원</h3>
         <div id="lobby-players" style="margin-bottom:20px; min-height: 60px;"></div>
@@ -57,29 +58,31 @@
     </div>
 
 <script>
-    // [중요] 보안망 차단을 피하기 위해 더 많은 공용 릴레이 서버 사용
+    // 다양한 도메인의 릴레이 서버를 사용하여 보안망 우회 시도
     const gun = Gun([
         'https://gun-manhattan.herokuapp.com/gun',
         'https://relay.peer.ooo/gun',
-        'https://gunjs.herokuapp.com/gun',
-        'https://gun-us.herokuapp.com/gun'
+        'https://gunjs.herokuapp.com/gun'
     ]);
     
     const IMG_BASE = "https://cdn.jsdelivr.net/gh/hmkim199/java-dalmuti@master/src/dalmuti/img/";
     let room, myName, myId, gameState = {}, selectedCards = [];
     let playersMap = new Map();
     
+    // [중요] 브라우저에 고유 ID를 저장하여 '지연' 중복 현상 방지
+    if(!localStorage.getItem('dalmuti_vfinal_id')) {
+        localStorage.setItem('dalmuti_vfinal_id', 'u' + Math.random().toString(36).substr(2, 5));
+    }
+    myId = localStorage.getItem('dalmuti_vfinal_id');
+
     const urlParams = new URLSearchParams(window.location.search);
     let currentRoomId = urlParams.get('room');
 
-    if(!localStorage.getItem('dm_uid_vfinal')) localStorage.setItem('dm_uid_vfinal', 'u' + Math.random().toString(36).substr(2, 5));
-    myId = localStorage.getItem('dm_uid_vfinal');
-
     // 서버 연결 성공 시 상단 바 초록색으로 변경
     gun.on('hi', () => {
-        const sd = document.getElementById('status-display');
-        sd.innerText = "🟢 서버 연결 성공! 게임 가능";
-        sd.classList.add('online');
+        const sb = document.getElementById('status-bar');
+        sb.innerText = "🟢 서버 연결 성공";
+        sb.classList.add('online');
     });
 
     if(currentRoomId) {
@@ -99,7 +102,10 @@
         myName = document.getElementById('my-name').value.trim();
         if(!myName) return alert("닉네임을 입력하세요.");
 
-        room = gun.get('dalmuti_v12_' + currentRoomId);
+        // 데이터 경로 충돌 방지를 위해 v15 사용
+        room = gun.get('dalmuti_v15_' + currentRoomId);
+        
+        // 내 정보 저장 (ID가 고정되어 중복 방지됨)
         room.get('players').get(myId).put({ name: myName, id: myId });
         
         document.getElementById('display-room-id').innerText = currentRoomId;
@@ -127,7 +133,7 @@
 
     function copyInviteURL() {
         const fullURL = window.location.origin + window.location.pathname + "?room=" + currentRoomId;
-        navigator.clipboard.writeText(fullURL).then(() => alert("초대 링크가 복사되었습니다!"));
+        navigator.clipboard.writeText(fullURL).then(() => alert("링크가 복사되었습니다!"));
     }
 
     function startGame() {
