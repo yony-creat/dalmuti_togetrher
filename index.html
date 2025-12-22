@@ -8,24 +8,38 @@
     <style>
         :root { --bg-color: #1a252f; --accent: #f1c40f; --dalmuti-color: #f1c40f; --peon-color: #95a5a6; }
         body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg-color); color: white; margin: 0; padding: 10px; text-align: center; }
+        
+        /* 상단 신분 고정 바 */
+        #role-header { background: #2c3e50; padding: 10px; border-radius: 10px; margin-bottom: 10px; border-bottom: 2px solid var(--accent); font-size: 0.9rem; }
+        
         #setup, #role-draw, #tax-phase, #game-board, #round-result-screen { background: rgba(0,0,0,0.5); padding: 20px; border-radius: 15px; max-width: 500px; margin: 10px auto; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 1px solid #34495e; }
+        
         .card-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 15px; min-height: 110px; }
         .card { width: 70px; height: 105px; background: white; border-radius: 8px; border: 2px solid #333; cursor: pointer; overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; color: #2c3e50; }
-        .card-number { font-size: 32px; font-weight: bold; position: absolute; z-index: 1; }
-        .card img { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 2; }
+        
+        /* 이미지가 없을 때 숫자를 크게 */
+        .card-number { font-size: 36px; font-weight: bold; z-index: 1; }
+        .card img { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 2; }
+        
         .card.selected { transform: translateY(-15px); border-color: var(--accent); box-shadow: 0 0 15px var(--accent); z-index: 10; }
         .card.clickable { border: 3px solid var(--accent); animation: blink 1s infinite; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        
         button { padding: 12px 20px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; font-size: 16px; width: 85%; }
         input { padding: 12px; width: 85%; border-radius: 5px; border: 2px solid #34495e; font-size: 16px; margin-bottom: 10px; text-align: center; background: #ecf0f1; color: #2c3e50; }
         .hidden { display: none !important; }
         #status-bar { padding: 10px; margin-bottom: 10px; border-radius: 8px; font-size: 14px; background: #c0392b; font-weight: bold; }
         .online { background: #27ae60 !important; }
-        .p-badge { display: inline-block; padding: 5px 12px; margin: 5px; border-radius: 20px; font-size: 14px; background: rgba(255,255,255,0.1); border: 1px solid var(--accent); }
+        .p-badge { display: inline-block; padding: 5px 12px; margin: 3px; border-radius: 15px; font-size: 0.8rem; background: rgba(255,255,255,0.1); border: 1px solid #777; }
+        .active-p { border: 2px solid var(--accent); color: var(--accent); }
     </style>
 </head>
 <body>
     <div id="status-bar">📡 신호기 준비 중...</div>
+
+    <div id="role-header" class="hidden">
+        👑 달무티: <span id="h-dalmuti">-</span> | 💩 농노: <span id="h-peon">-</span>
+    </div>
 
     <div id="setup">
         <h2 style="color:var(--accent)">🏰 달무티</h2>
@@ -45,9 +59,9 @@
 
     <div id="role-draw" class="hidden">
         <h3>🃏 서열 정하기</h3>
-        <div id="draw-turn-msg" style="color:var(--accent); font-weight:bold; margin-bottom:10px;">차례 확인 중...</div>
+        <div id="draw-turn-msg" style="color:var(--accent); font-weight:bold; margin-bottom:10px; font-size:1.2rem;">차례 확인 중...</div>
         <div id="role-cards" class="card-container"></div>
-        <div id="role-results" style="margin-top:20px; font-weight:bold;"></div>
+        <div id="role-results" style="margin-top:20px;"></div>
         <button id="tax-btn" class="hidden" onclick="hostGoTax()" style="background:#2ecc71;">💰 세금 납부 단계로</button>
     </div>
 
@@ -59,7 +73,7 @@
     </div>
 
     <div id="game-board" class="hidden">
-        <div id="rank-board" style="margin-bottom:10px;"></div>
+        <div id="game-player-status" style="margin-bottom:15px;"></div>
         <div id="turn-indicator" style="font-size:1.1rem; color:var(--accent); font-weight:bold; margin-bottom:10px;"></div>
         <div style="min-height:120px; background:rgba(255,255,255,0.05); border-radius:10px; padding:10px;"><div id="table" class="card-container"></div></div>
         <button id="show-btn" onclick="revealHand()">내 카드 확인하기</button>
@@ -71,7 +85,7 @@
     </div>
 
     <div id="round-result-screen" class="hidden">
-        <h3>🏆 라운드 결과</h3>
+        <h3>🏆 라운드 종료! 새로운 서열</h3>
         <div id="final-ranks"></div>
         <div style="margin-top:30px;">
             <button id="next-btn" class="hidden" onclick="hostGoTax()" style="background:#2ecc71;">이 결과로 계속 진행</button>
@@ -94,9 +108,10 @@
 
     function initHost() {
         myRole = 'host'; hostPeerId = myId; const name = document.getElementById('user-name').value || "방장";
-        state.players = [{id: myId, name, rankVal: 0, role: '심사중', cards: 0}];
-        state.status = 'lobby'; updateLobby();
+        state.players = [{id: myId, name, rankVal: 0, role: '심사중', cards: 0, finished: false}];
+        state.status = 'lobby'; showScreen('setup'); 
         document.getElementById('entry-view').classList.add('hidden'); document.getElementById('lobby-view').classList.remove('hidden');
+        updateLobby();
         peer.on('connection', c => { c.on('open', () => { c.on('data', d => handle(d, c)); }); });
     }
 
@@ -106,6 +121,7 @@
         conn.on('open', () => {
             myRole = 'guest'; conns[hostPeerId] = conn;
             conn.send({type: 'JOIN', name});
+            showScreen('setup');
             document.getElementById('entry-view').classList.add('hidden'); document.getElementById('lobby-view').classList.remove('hidden');
             document.getElementById('guest-msg').classList.remove('hidden');
             conn.on('data', d => handle(d, conn));
@@ -115,25 +131,22 @@
     function handle(d, c) {
         if(d.type === 'JOIN') {
             conns[c.peer] = c;
-            if(!state.players.find(p => p.id === c.peer)) state.players.push({id: c.peer, name: d.name, rankVal: 0, role: '심사중', cards: 0});
-            updateLobby();
-            if(state.players.length >= 2) document.getElementById('start-btn').classList.remove('hidden');
+            if(!state.players.find(p => p.id === c.peer)) state.players.push({id: c.peer, name: d.name, rankVal: 0, role: '심사중', cards: 0, finished: false});
+            updateLobby(); if(state.players.length >= 2) document.getElementById('start-btn').classList.remove('hidden');
             sync();
         }
         if(d.type === 'SYNC') { state = d.state; if(d.hand) myHand = d.hand; refresh(); }
-        if(d.type === 'PICK_RES') { 
-            const p = state.players.find(x => x.id === d.uid);
-            p.rankVal = d.val;
-            state.turnIdx++;
-            checkPicked();
+        if(d.type === 'PICK_REQ') {
+            const p = state.players.find(x => x.id === c.peer);
+            p.rankVal = state.rankDeck.pop();
+            state.turnIdx++; checkPicked();
         }
     }
 
     function updateLobby() { document.getElementById('player-list').innerHTML = "참가자: " + state.players.map(p => `<span class="p-badge">${p.name}</span>`).join(''); }
 
     function hostGoDraw() { 
-        state.status = 'role-draw'; 
-        state.turnIdx = 0; 
+        state.status = 'role-draw'; state.turnIdx = 0; 
         state.rankDeck = Array.from({length: 12}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
         sync(); refresh(); 
     }
@@ -142,38 +155,33 @@
         showScreen(state.status);
         if(state.status === 'role-draw') renderRoleCards();
         if(state.status === 'game-board') renderGame();
+        
+        // 상단 헤더 업데이트
+        if(state.players.length > 0 && state.status !== 'lobby') {
+            const dal = state.players[0];
+            const peon = state.players[state.players.length-1];
+            document.getElementById('h-dalmuti').innerText = dal.rankVal > 0 ? dal.name : "-";
+            document.getElementById('h-peon').innerText = peon.rankVal > 0 ? peon.name : "-";
+            document.getElementById('role-header').classList.remove('hidden');
+        }
     }
 
     function renderRoleCards() {
         const div = document.getElementById('role-cards'); div.innerHTML = "";
         const currentPicker = state.players[state.turnIdx];
+        document.getElementById('draw-turn-msg').innerText = currentPicker ? (currentPicker.id === myId ? "⭐ 당신이 뽑을 차례!" : `📢 [${currentPicker.name}] 뽑는 중...`) : "모두 완료!";
         
-        if(currentPicker) {
-            document.getElementById('draw-turn-msg').innerText = currentPicker.id === myId ? "⭐ 당신이 카드를 뽑을 차례입니다!" : `📢 [${currentPicker.name}] 님이 뽑는 중...`;
-        } else {
-            document.getElementById('draw-turn-msg').innerText = "모두 뽑았습니다!";
-        }
-
-        state.players.forEach((p, idx) => {
-            const c = document.createElement('div');
-            c.className = 'card';
+        state.players.forEach(p => {
+            const c = document.createElement('div'); c.className = 'card';
             if(p.rankVal > 0) {
-                c.innerHTML = `<div class="card-number">${p.rankVal}</div><img src="${IMG}${p.rankVal}.png">`;
+                c.innerHTML = `<div class="card-number">${p.rankVal}</div><img src="${IMG}${p.rankVal}.png" onerror="this.style.display='none'">`;
             } else {
                 c.innerHTML = `<div class="card-number">?</div>`;
-                // 자기 차례일 때만 클릭 가능
                 if(p.id === myId && currentPicker && currentPicker.id === myId) {
                     c.classList.add('clickable');
                     c.onclick = () => {
-                        if(myRole === 'host') {
-                            state.players[0].rankVal = state.rankDeck.pop();
-                            state.turnIdx++;
-                            checkPicked();
-                        } else {
-                            // 게스트는 방장에게 뽑겠다는 신호만 보냄 (숫자는 방장이 정함)
-                            conns[hostPeerId].send({type: 'PICK_REQ'});
-                            // 방장에서 숫자를 정해서 보내주기 위해 로직 살짝 수정
-                        }
+                        if(myRole === 'host') { state.players[0].rankVal = state.rankDeck.pop(); state.turnIdx++; checkPicked(); }
+                        else conns[hostPeerId].send({type: 'PICK_REQ'});
                     };
                 }
             }
@@ -181,23 +189,11 @@
         });
     }
 
-    // 방장에서 PICK_REQ 처리 추가
-    peer.on('connection', c => {
-        c.on('data', d => {
-            if(d.type === 'PICK_REQ') {
-                const p = state.players.find(x => x.id === c.peer);
-                p.rankVal = state.rankDeck.pop();
-                state.turnIdx++;
-                checkPicked();
-            }
-        });
-    });
-
     function checkPicked() {
         if(state.turnIdx >= state.players.length) {
             state.players.sort((a,b) => a.rankVal - b.rankVal);
             state.players.forEach((p, i) => p.role = i===0 ? "👑 달무티" : (i===state.players.length-1 ? "💩 농노" : `${i+1}등 평민`));
-            document.getElementById('role-results').innerHTML = state.players.map(p => `<div>${p.role}: ${p.name} (${p.rankVal}번)</div>`).join('');
+            document.getElementById('role-results').innerHTML = state.players.map(p => `<div>${p.role}: ${p.name}</div>`).join('');
             if(myRole === 'host') document.getElementById('tax-btn').classList.remove('hidden');
         }
         sync(); refresh();
@@ -216,10 +212,16 @@
 
     function renderGame() {
         const turnP = state.players[state.turnIdx];
-        document.getElementById('turn-indicator').innerText = turnP.id === myId ? "⭐ 내 차례입니다!" : `📢 [${turnP.name}] 차례`;
-        document.getElementById('rank-board').innerHTML = state.players.map(p => `<span class="p-badge" style="${p.id===turnP.id?'background:var(--accent);color:#000':''}">${p.name}(🎴${p.cards})</span>`).join(' ');
+        document.getElementById('turn-indicator').innerText = turnP.id === myId ? "⭐ 내 차례!" : `📢 [${turnP.name}] 차례`;
+        
+        // 실시간 카드 장수 및 신분 표시
+        document.getElementById('game-player-status').innerHTML = state.players.map(p => `
+            <span class="p-badge ${p.id===turnP.id?'active-p':''}">
+                ${p.role.split(' ')[0]} ${p.name}: <b>🎴${p.finished ? '탈출' : p.cards}</b>
+            </span>`).join('');
+
         const t = document.getElementById('table'); t.innerHTML = "";
-        for(let i=0; i<state.last.count; i++) t.innerHTML += `<div class="card"><div class="card-number">${state.last.rank}</div><img src="${IMG}${state.last.rank}.png"></div>`;
+        for(let i=0; i<state.last.count; i++) t.innerHTML += `<div class="card"><div class="card-number">${state.last.rank}</div><img src="${IMG}${state.last.rank}.png" onerror="this.style.display='none'"></div>`;
     }
 
     function revealHand() {
@@ -227,14 +229,14 @@
         document.getElementById('actions').classList.remove('hidden');
         myHand.sort((a,b)=>a-b).forEach((r, i) => {
             const c = document.createElement('div'); c.className = 'card';
-            c.innerHTML = `<div class="card-number">${r}</div><img src="${IMG}${r}.png">`;
+            c.innerHTML = `<div class="card-number">${r}</div><img src="${IMG}${r}.png" onerror="this.style.display='none'">`;
             c.onclick = () => { c.classList.toggle('selected'); const idx = selected.findIndex(x=>x.i===i); if(idx>-1) selected.splice(idx,1); else selected.push({r, i}); };
             div.appendChild(c);
         });
     }
 
     function playCards() {
-        if(state.players[state.turnIdx].id !== myId) return alert("당신 차례가 아닙니다.");
+        if(state.players[state.turnIdx].id !== myId) return alert("차례가 아닙니다.");
         const r = selected[0].r;
         if(state.last.count === 0 || (selected.length === state.last.count && r < state.last.rank)) {
             state.last = {rank: r, count: selected.length};
