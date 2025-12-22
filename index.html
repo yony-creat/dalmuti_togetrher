@@ -401,38 +401,47 @@ function submitTax() {
         });
     }
 
-  function playCards() {
+function playCards() {
     if(!selectedCards.length) return;
 
-    // 1. 조커(13)가 아닌 카드가 있는지 확인
+    // 1. 조커(13)를 제외한 일반 카드들만 추출
     const nonJokerCards = selectedCards.filter(c => c.rank !== 13);
     
-    // 2. 조커만 선택했는지 체크 (조커 단독 사용 금지 규칙 적용 시)
+    // [규칙] 조커만 단독으로 낼 수는 없음
     if (nonJokerCards.length === 0) {
-        return alert("조커는 단독으로 낼 수 없습니다! 다른 카드와 함께 사용하세요.");
+        return alert("조커는 단독으로 낼 수 없습니다! 일반 카드와 함께 내세요.");
     }
 
-    // 3. 조커가 아닌 카드의 숫자를 '변신할 숫자'로 정함
-    // (모두 같은 숫자여야 하므로 첫 번째 nonJoker의 숫자를 사용)
+    // 2. 변신할 숫자 결정 (일반 카드의 숫자)
     const effectiveRank = nonJokerCards[0].rank;
-    const count = selectedCards.length;
+    
+    // 3. ★중요★ 전체 장수 계산 (일반 카드 수 + 조커 수)
+    const totalCount = selectedCards.length; 
 
-    // 4. 선택된 카드들 중 조커가 아닌 카드들이 모두 같은 숫자인지 검증
-    const isAllSame = nonJokerCards.every(c => c.rank === effectiveRank);
-    if (!isAllSame) {
-        return alert("서로 다른 숫자의 카드를 섞어서 낼 수 없습니다!");
+    // 4. 일반 카드들이 모두 같은 숫자인지 확인 (예: 3번 2개 + 4번 1개 + 조커 혼합 방지)
+    if (!nonJokerCards.every(c => c.rank === effectiveRank)) {
+        return alert("서로 다른 숫자의 카드는 함께 낼 수 없습니다.");
     }
 
-    // 5. 기존 바닥 카드와 비교 (더 낮은 숫자여야 함)
+    // 5. 바닥에 깔린 카드와 비교 (장수는 같아야 하고 숫자는 낮아야 함)
     if(lastPlayed.count > 0) {
-        if(count !== lastPlayed.count || effectiveRank >= lastPlayed.rank) {
+        if(totalCount !== lastPlayed.count || effectiveRank >= lastPlayed.rank) {
             return alert(`${lastPlayed.count}장으로 ${lastPlayed.rank}보다 낮은 숫자를 내야 합니다.`);
         }
     }
 
-    // 6. 서버(방장)에 전송
-    if(isHost) doPlay(effectiveRank, count, players.findIndex(p => p.id === myID));
-    else conn.send({type:'PLAY_REQ', rank: effectiveRank, count: count, pIdx: players.findIndex(p => p.id === myID)});
+    // 6. 서버(방장)로 변신한 숫자(effectiveRank)와 합쳐진 장수(totalCount) 전송
+    const myIdx = players.findIndex(p => p.id === myID);
+    if(isHost) {
+        doPlay(effectiveRank, totalCount, myIdx);
+    } else {
+        conn.send({
+            type: 'PLAY_REQ', 
+            rank: effectiveRank, 
+            count: totalCount, 
+            pIdx: myIdx
+        });
+    }
 }
 
  function doPlay(rank, count, pIdx) {
