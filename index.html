@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>달무티 온라인</title>
+    <title>달무티 온라인 - 서버 강화판</title>
     <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <style>
         :root { --bg-color: #1a252f; --accent: #f1c40f; }
@@ -18,12 +18,13 @@
         input { padding: 12px; width: 80%; border-radius: 5px; border: 2px solid #34495e; font-size: 16px; margin-bottom: 15px; text-align: center; background: #ecf0f1; color: #2c3e50; }
         .hidden { display: none; }
         .player-tag { background: #2c3e50; padding: 8px 15px; border-radius: 20px; margin: 5px; display: inline-block; border: 1px solid var(--accent); font-weight: bold; }
-        #room-status-bar { background: #34495e; padding: 10px; border-radius: 10px; margin-bottom: 15px; font-size: 14px; }
-        #conn-msg { font-size: 12px; color: #888; margin-top: 5px; }
+        #status-display { padding: 10px; margin-bottom: 10px; border-radius: 10px; font-size: 14px; background: #c0392b; }
+        .online { background: #27ae60 !important; }
     </style>
 </head>
 <body>
     <h2 style="color:var(--accent)">🏰 달무티 멀티플레이</h2>
+    <div id="status-display">🔴 서버 연결 중 (계속 안 뜨면 데이터 모드 권장)</div>
 
     <div id="setup-screen" class="screen">
         <div id="create-view">
@@ -31,20 +32,19 @@
         </div>
         <div id="join-view" class="hidden">
             <p id="room-notice" style="color:var(--accent); font-weight:bold;"></p>
-            <input type="text" id="my-name" placeholder="닉네임 입력" autocomplete="off" value="">
+            <input type="text" id="my-name" placeholder="닉네임 입력" autocomplete="off">
             <button onclick="processJoin()">게임 입장하기</button>
         </div>
     </div>
 
     <div id="lobby-screen" class="screen hidden">
-        <div id="room-status-bar">
+        <div style="background: #34495e; padding: 10px; border-radius: 10px; margin-bottom: 15px;">
             🏠 방 코드: <b id="display-room-id" style="color:var(--accent)"></b><br>
-            <small id="invite-link-text" style="word-break:break-all; color:#aaa; cursor:pointer;" onclick="copyInviteURL()">🔗 초대 링크 복사 (클릭)</small>
+            <small onclick="copyInviteURL()" style="cursor:pointer; color:#aaa;">🔗 초대 링크 복사 (클릭)</small>
         </div>
         <h3>👥 현재 접속 인원</h3>
         <div id="lobby-players" style="margin-bottom:20px; min-height: 60px;"></div>
-        <button id="start-btn" onclick="startGame()">모든 플레이어 시작</button>
-        <div id="conn-msg">서버 연결 확인 중...</div>
+        <button onclick="startGame()">모든 플레이어 시작</button>
     </div>
 
     <div id="game-screen" class="screen hidden">
@@ -58,10 +58,11 @@
     </div>
 
 <script>
-    // 릴레이 서버를 여러 개 두어 하나가 막혀도 다른 곳으로 통신 시도
+    // [중요] 여러 개의 공용 릴레이 서버 리스트 (보안망 우회용)
     const gun = Gun([
         'https://gun-manhattan.herokuapp.com/gun',
         'https://relay.peer.ooo/gun',
+        'https://gun-us.herokuapp.com/gun',
         'https://gunjs.herokuapp.com/gun'
     ]);
     
@@ -72,16 +73,21 @@
     const urlParams = new URLSearchParams(window.location.search);
     let currentRoomId = urlParams.get('room');
 
-    if(!localStorage.getItem('dm_uid_vfinal')) localStorage.setItem('dm_uid_vfinal', 'u' + Math.random().toString(36).substr(2, 5));
-    myId = localStorage.getItem('dm_uid_vfinal');
+    if(!localStorage.getItem('dm_uid_ultimate')) localStorage.setItem('dm_uid_ultimate', 'u' + Math.random().toString(36).substr(2, 5));
+    myId = localStorage.getItem('dm_uid_ultimate');
+
+    // 연결 성공 시 표시 변경
+    gun.on('hi', () => {
+        const sd = document.getElementById('status-display');
+        sd.innerText = "🟢 서버 연결 성공";
+        sd.classList.add('online');
+    });
 
     if(currentRoomId) {
         document.getElementById('create-view').classList.add('hidden');
         document.getElementById('join-view').classList.remove('hidden');
         document.getElementById('room-notice').innerText = "초대받은 방에 입장합니다.";
     }
-
-    gun.on('hi', () => document.getElementById('conn-msg').innerText = "🟢 서버 연결됨");
 
     function initCreateRoom() {
         currentRoomId = 'rm' + Math.random().toString(36).substr(2, 5);
@@ -94,9 +100,9 @@
         myName = document.getElementById('my-name').value.trim();
         if(!myName) return alert("닉네임을 입력하세요.");
 
-        // 데이터 꼬임 방지를 위해 v10 경로 사용
-        room = gun.get('dalmuti_v10_' + currentRoomId);
-        room.get('players').get(myId).put({ name: myName, id: myId, time: Date.now() });
+        // 데이터를 새롭게 분리하여 동기화 속도 향상 (v11)
+        room = gun.get('dalmuti_v11_stable_' + currentRoomId);
+        room.get('players').get(myId).put({ name: myName, id: myId });
         
         document.getElementById('display-room-id').innerText = currentRoomId;
         showScreen('lobby-screen');
@@ -123,12 +129,12 @@
 
     function copyInviteURL() {
         const fullURL = window.location.origin + window.location.pathname + "?room=" + currentRoomId;
-        navigator.clipboard.writeText(fullURL).then(() => alert("초대 링크가 복사되었습니다!"));
+        navigator.clipboard.writeText(fullURL).then(() => alert("링크가 복사되었습니다! 카톡으로 보내세요."));
     }
 
     function startGame() {
         const pList = Array.from(playersMap).map(([id, name]) => ({ id, name }));
-        if(pList.length < 2) return alert("최소 2명 이상이 대기실에 보여야 합니다.");
+        if(pList.length < 2) return alert("최소 2명 이상의 플레이어가 대기실에 보여야 합니다.");
 
         let deck = [];
         for (let i = 1; i <= 12; i++) for (let j = 0; j < i; j++) deck.push(i);
