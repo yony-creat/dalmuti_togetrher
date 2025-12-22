@@ -25,42 +25,60 @@ body {
     margin: 10px auto;
 }
 
-/* 3. 카드 컨테이너 설정 */
-.card-container { 
-    display: flex; 
-    flex-wrap: wrap; 
-    justify-content: flex-start; /* 왼쪽부터 꽉 채움 */
-    gap: 1vw !important; /* 카드 사이 간격 최소화 (화면의 1%) */
-    padding: 5px 0;
-    width: 100%;
-}
-
-/* 4. 카드 크기 재계산 (5장 보장) */
+/* [공통] 카드의 기본 디자인 (색상 및 모양) */
 .card { 
-    /* 화면 전체 100vw에서 좌우 여백 및 카드 간격을 뺀 수치 
-       18.5vw 정도로 설정하면 테두리 포함 5장이 안전하게 들어갑니다.
-    */
-    width: 18.5vw !important; 
-    max-width: 85px; /* 웹 브라우저용 최대 크기 제한 */
-    aspect-ratio: 2 / 3; /* 가로세로 비율 고정 */
-    
     background: white; 
-    border: 1px solid #333 !important; /* 테두리를 얇게 하여 공간 확보 */
     border-radius: 4px; 
     display: flex; 
     align-items: center; 
     justify-content: center; 
-    box-sizing: border-box; /* 테두리가 너비에 포함되게 함 */
-    flex-shrink: 0; /* 카드가 눌리지 않게 함 */
+    box-sizing: border-box; 
+    flex-shrink: 0;
+    aspect-ratio: 2 / 3; /* 가로세로 비율 고정 */
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.1s;
 }
 
-/* 5. 글자 크기 최적화 */
 .card-number { 
-    /* 5장일 때 숫자가 잘리지 않도록 크기 조절 */
-    font-size: 7vw !important; 
-    max-font-size: 30px;
-    font-weight: bold;
-    color: #2c3e50;
+    font-weight: bold; 
+    color: #2c3e50; 
+}
+
+/* 📱 모바일 설정: 화면 폭이 600px 이하일 때 (5장 보장) */
+@media (max-width: 600px) {
+    .card-container { 
+        display: flex; 
+        flex-wrap: wrap; 
+        justify-content: flex-start; 
+        gap: 1vw !important; 
+        padding: 5px 0;
+        width: 100%;
+    }
+    .card { 
+        width: 18.5vw !important; /* 모바일 화면 기준 18.5% */
+        border: 1px solid #333 !important; 
+    }
+    .card-number { 
+        font-size: 7vw !important; 
+    }
+}
+
+/* 💻 PC 설정: 화면 폭이 601px 이상일 때 (거대해짐 방지) */
+@media (min-width: 601px) {
+    .card-container { 
+        display: flex; 
+        flex-wrap: wrap; 
+        justify-content: center; /* PC에서는 중앙 정렬이 깔끔함 */
+        gap: 10px; 
+    }
+    .card { 
+        width: 80px !important; /* PC에서는 80px로 크기 고정 */
+        border: 1.5px solid #333 !important; 
+    }
+    .card-number { 
+        font-size: 32px !important; /* PC용 고정 글자 크기 */
+    }
 }
         .card.selected { transform: translateY(-15px); border: 3px solid #e67e22; background: #fff9e6; }
         .card.disabled { opacity: 0.6; cursor: default; background: #bdc3c7; color: #7f8c8d; }
