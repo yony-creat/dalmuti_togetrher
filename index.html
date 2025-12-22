@@ -3,90 +3,206 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>달무티 - 다이렉트 연결</title>
+    <title>달무티 - 멀티플레이 최종</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root { --bg-color: #1a252f; --accent: #f1c40f; }
-        body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg-color); color: white; margin: 0; padding: 10px; text-align: center; }
-        .screen { background: rgba(0,0,0,0.5); padding: 20px; border-radius: 15px; max-width: 500px; margin: 10px auto; border: 1px solid #34495e; }
-        button { padding: 12px 20px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; font-size: 16px; width: 85%; }
-        #status-bar { padding: 12px; margin-bottom: 15px; border-radius: 10px; font-size: 14px; background: #c0392b; font-weight: bold; }
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg-color); color: white; margin: 0; padding: 10px; text-align: center; overflow-x: hidden; }
+        .screen { background: rgba(0,0,0,0.5); padding: 15px; border-radius: 15px; max-width: 500px; margin: 10px auto; border: 1px solid #34495e; }
+        .card-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 10px 0; min-height: 100px; }
+        .card { width: 60px; height: 90px; background: white; border-radius: 6px; border: 2px solid #333; cursor: pointer; position: relative; color: #2c3e50; transition: 0.2s; }
+        .card img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+        .card.selected { transform: translateY(-15px); border-color: var(--accent); box-shadow: 0 0 10px var(--accent); z-index: 10; }
+        button { padding: 12px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; width: 85%; }
+        #status-bar { padding: 10px; margin-bottom: 10px; border-radius: 8px; font-size: 14px; background: #c0392b; font-weight: bold; }
         .online { background: #27ae60 !important; }
         .hidden { display: none; }
+        .player-tag { background: #34495e; padding: 5px 12px; border-radius: 20px; margin: 5px; display: inline-block; border: 1px solid var(--accent); font-size: 14px; }
     </style>
 </head>
 <body>
-    <h2 style="color:var(--accent)">🏰 달무티 (다이렉트)</h2>
-    <div id="status-bar">📡 신호기 켜는 중...</div>
+    <div id="status-bar">📡 무전기 주파수 맞추는 중...</div>
 
     <div id="setup-screen" class="screen">
         <div id="host-view">
-            <button onclick="createRoom()">➕ 방장으로 게임 시작</button>
+            <button onclick="beHost()">🏰 내가 방 만들기 (방장)</button>
         </div>
         <div id="join-view" class="hidden">
-            <p style="color:var(--accent)">지연님이 보내준 링크로 접속하셨나요?</p>
-            <input type="text" id="my-name" placeholder="내 이름 입력" style="padding:10px; width:80%; margin-bottom:10px;">
-            <button onclick="joinRoom()">게임 입장</button>
+            <input type="text" id="user-name" placeholder="닉네임 입력" style="padding:10px; width:75%; margin-bottom:10px; color:#000; border-radius: 5px; border: none;">
+            <button onclick="beGuest()">게임 입장하기</button>
         </div>
     </div>
 
-    <div id="lobby-screen" class="screen hidden">
-        <p>🔗 아래 주소를 복사해서 지연님께 보내세요!</p>
-        <div id="invite-url" style="background:#000; padding:10px; font-size:12px; word-break:break-all; margin-bottom:10px; cursor:pointer;" onclick="copyLink()"></div>
-        <div id="players"></div>
+    <div id="game-screen" class="screen hidden">
+        <div id="lobby-area">
+            <div id="invite-box" class="hidden" style="margin-bottom:15px;">
+                <p style="font-size:12px; color:var(--accent);">링크를 복사해서 공유하세요!</p>
+                <div id="room-url" style="background:#000; padding:8px; font-size:10px; word-break:break-all; cursor:pointer;" onclick="copyURL()"></div>
+            </div>
+            <h3>👥 현재 대기 인원</h3>
+            <div id="player-list"></div>
+            <button id="start-btn" class="hidden" onclick="startGame()">🎴 게임 시작!</button>
+        </div>
+
+        <div id="play-area" class="hidden">
+            <div id="turn-info" style="color:var(--accent); font-weight:bold; margin-bottom:10px;"></div>
+            <div id="table" class="card-container" style="background:rgba(255,255,255,0.05); border-radius:10px;"></div>
+            <div id="hand" class="card-container"></div>
+            <div id="controls" class="hidden">
+                <button onclick="playCards()" style="width:45%">내기</button>
+                <button onclick="passTurn()" style="background:#7f8c8d; width:45%">패스</button>
+            </div>
+        </div>
     </div>
 
 <script>
+    const IMG_BASE = "https://cdn.jsdelivr.net/gh/hmkim199/java-dalmuti@master/src/dalmuti/img/";
     const sb = document.getElementById('status-bar');
-    let peer, conn, myId;
-    const urlParams = new URLSearchParams(window.location.search);
-    const targetRoom = urlParams.get('room');
-
-    // 1. 신호기(Peer) 초기화
-    peer = new Peer();
+    let peer = new Peer(), connMap = {}, myRole, myHand = [], selected = [], gameState = { players: [], turn: 0, lastPlayed: {rank:14, count:0} };
+    const roomCode = new URLSearchParams(window.location.search).get('room');
 
     peer.on('open', (id) => {
-        myId = id;
-        sb.innerText = "🟢 신호 준비 완료";
-        sb.classList.add('online');
-        if(targetRoom) {
+        sb.innerText = "🟢 접속 준비 완료"; sb.classList.add('online');
+        if(roomCode) {
             document.getElementById('host-view').classList.add('hidden');
             document.getElementById('join-view').classList.remove('hidden');
         }
     });
 
-    // 2. 방 만들기 (Host)
-    function createRoom() {
-        const link = window.location.origin + window.location.pathname + "?room=" + myId;
-        document.getElementById('invite-url').innerText = link;
-        document.getElementById('setup-screen').classList.add('hidden');
-        document.getElementById('lobby-screen').classList.remove('hidden');
+    // 방장 로직
+    function beHost() {
+        myRole = 'host';
+        const name = prompt("사용할 닉네임을 입력하세요", "방장");
+        gameState.players.push({id: peer.id, name: name});
+        updateLobby();
         
+        const link = window.location.origin + window.location.pathname + "?room=" + peer.id;
+        document.getElementById('room-url').innerText = link;
+        document.getElementById('invite-box').classList.remove('hidden');
+        showScreen('game-screen');
+
         peer.on('connection', (c) => {
-            conn = c;
-            conn.on('open', () => {
-                document.getElementById('players').innerHTML += "👤 지연님이 접속했습니다!<br>";
-                conn.send({type: 'welcome', msg: '안녕! 지연아!'});
+            c.on('open', () => {
+                c.on('data', (data) => {
+                    if(data.type === 'join') {
+                        if(!connMap[c.peer]) {
+                            connMap[c.peer] = c;
+                            gameState.players.push({id: c.peer, name: data.name});
+                            broadcast({type: 'lobby', players: gameState.players});
+                            updateLobby();
+                            document.getElementById('start-btn').classList.remove('hidden');
+                        }
+                    } else { handleGameData(data); }
+                });
             });
         });
     }
 
-    // 3. 참여하기 (Guest)
-    function joinRoom() {
-        const name = document.getElementById('my-name').value;
-        conn = peer.connect(targetRoom);
+    // 참가자 로직
+    function beGuest() {
+        myRole = 'guest';
+        const name = document.getElementById('user-name').value || "참가자";
+        const conn = peer.connect(roomCode);
         conn.on('open', () => {
-            sb.innerText = "🟢 지연님과 연결 성공!";
-            document.getElementById('setup-screen').innerHTML = "<h3>🏰 연결 성공!</h3><p>아빠와 대화를 시작합니다.</p>";
+            conn.send({type: 'join', name: name});
+            showScreen('game-screen');
+            conn.on('data', handleGameData);
         });
-        conn.on('data', (data) => {
-            alert("아빠로부터 온 메시지: " + data.msg);
-        });
+        connMap[roomCode] = conn;
     }
 
-    function copyLink() {
-        navigator.clipboard.writeText(document.getElementById('invite-url').innerText);
-        alert("링크 복사 완료!");
+    function handleGameData(data) {
+        if(data.type === 'lobby') { gameState.players = data.players; updateLobby(); }
+        if(data.type === 'start') {
+            myHand = data.hands[peer.id];
+            gameState = data.state;
+            document.getElementById('lobby-area').classList.add('hidden');
+            document.getElementById('play-area').classList.remove('hidden');
+            renderGame();
+        }
+        if(data.type === 'sync') { gameState = data.state; renderGame(); }
+    }
+
+    function updateLobby() {
+        document.getElementById('player-list').innerHTML = gameState.players.map(p => `<span class="player-tag">👤 ${p.name}</span>`).join('');
+    }
+
+    function startGame() {
+        let deck = [];
+        for(let i=1; i<=12; i++) for(let j=0; j<i; j++) deck.push(i);
+        deck.push(13, 13); deck.sort(() => Math.random() - 0.5);
+        
+        let hands = {};
+        gameState.players.forEach(p => hands[p.id] = []);
+        let idx = 0;
+        while(deck.length > 0) {
+            hands[gameState.players[idx % gameState.players.length].id].push(deck.pop());
+            idx++;
+        }
+        
+        const startData = { type: 'start', hands: hands, state: gameState };
+        broadcast(startData);
+        handleGameData(startData);
+    }
+
+    function renderGame() {
+        const turnPlayer = gameState.players[gameState.turn];
+        document.getElementById('turn-info').innerText = turnPlayer.id === peer.id ? "⭐ 내 차례입니다!" : `📢 [${turnPlayer.name}] 차례입니다.`;
+        document.getElementById('controls').classList.toggle('hidden', turnPlayer.id !== peer.id);
+        
+        document.getElementById('table').innerHTML = "";
+        for(let i=0; i<gameState.lastPlayed.count; i++) {
+            document.getElementById('table').innerHTML += `<div class="card"><img src="${IMG_BASE}${gameState.lastPlayed.rank}.png"></div>`;
+        }
+
+        const handDiv = document.getElementById('hand');
+        handDiv.innerHTML = "";
+        myHand.sort((a,b)=>a-b).forEach((r, i) => {
+            const c = document.createElement('div');
+            c.className = 'card';
+            c.innerHTML = `<img src="${IMG_BASE}${r}.png">`;
+            c.onclick = () => {
+                c.classList.toggle('selected');
+                const sIdx = selected.findIndex(s => s.i === i);
+                if(sIdx > -1) selected.splice(sIdx, 1); else selected.push({r, i});
+            };
+            handDiv.appendChild(c);
+        });
+        selected = [];
+    }
+
+    function playCards() {
+        if(selected.length === 0) return;
+        const rank = selected[0].r;
+        if(!selected.every(s => s.r === rank || s.r === 13)) return alert("같은 카드만 낼 수 있습니다!");
+        
+        if(gameState.lastPlayed.count === 0 || (selected.length === gameState.lastPlayed.count && rank < gameState.lastPlayed.rank)) {
+            gameState.lastPlayed = {rank, count: selected.length};
+            selected.sort((a,b)=>b.i-a.i).forEach(s => myHand.splice(s.i, 1));
+            gameState.turn = (gameState.turn + 1) % gameState.players.length;
+            broadcast({type: 'sync', state: gameState});
+            renderGame();
+        } else { alert("낼 수 없는 카드입니다."); }
+    }
+
+    function passTurn() {
+        gameState.turn = (gameState.turn + 1) % gameState.players.length;
+        broadcast({type: 'sync', state: gameState});
+        renderGame();
+    }
+
+    function broadcast(data) {
+        Object.values(connMap).forEach(c => c.send(data));
+    }
+
+    function showScreen(id) {
+        document.getElementById('setup-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+    }
+
+    function copyURL() {
+        navigator.clipboard.writeText(document.getElementById('room-url').innerText);
+        alert("링크가 복사되었습니다!");
     }
 </script>
 </body>
