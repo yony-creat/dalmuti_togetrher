@@ -17,14 +17,15 @@
         .card-number { font-size: 28px; font-weight: bold; position: absolute; z-index: 1; }
         .card img { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 2; }
         .card.selected { transform: translateY(-15px); border-color: var(--accent); box-shadow: 0 0 15px var(--accent); z-index: 10; }
-        button { padding: 12px 20px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; }
-        input { padding: 12px; width: 85%; border-radius: 5px; border: none; font-size: 16px; margin-bottom: 10px; text-align: center; background: #ecf0f1; color: #2c3e50; }
-        input:focus::placeholder { color: transparent; }
+        button { padding: 12px 20px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; font-size: 16px; }
+        
+        /* [수정] 입력창 글자 겹침 및 디자인 수정 */
+        input { padding: 12px; width: 85%; border-radius: 5px; border: 2px solid #34495e; font-size: 16px; margin-bottom: 10px; text-align: center; background: #ecf0f1; color: #2c3e50; }
+        input:focus { outline: none; border-color: var(--accent); background: #fff; }
+        input:focus::placeholder { color: transparent; } /* 클릭 시 예시 글자 숨김 */
+        
         .hidden { display: none; }
         #rank-board { background: rgba(255,255,255,0.1); padding: 10px; border-radius: 10px; margin-bottom: 10px; font-size: 0.8rem; border: 1px solid var(--accent); }
-        .badge { padding: 2px 6px; border-radius: 10px; margin: 2px; display: inline-block; font-weight: bold; }
-        .badge-1 { background: var(--accent); color: black; }
-        .finished { text-decoration: line-through; opacity: 0.5; }
     </style>
 </head>
 <body>
@@ -47,7 +48,6 @@
         <div id="rank-board"></div>
         <div id="turn-info" style="color:#3498db; font-weight:bold; margin-bottom:10px;">차례 확인 중...</div>
         <div id="table-cards" class="card-container" style="background:rgba(255,255,255,0.05); min-height:100px; border-radius:10px;"></div>
-        <div id="status-msg" style="color:#2ecc71; margin:10px 0; font-size:0.9rem;"></div>
         <div id="my-hand" class="card-container"></div>
         <div id="controls" class="hidden">
             <button onclick="playCards()">카드 내기</button>
@@ -55,17 +55,10 @@
         </div>
     </div>
 
-    <div id="result-screen" class="screen hidden">
-        <h3>결과 발표</h3>
-        <div id="rank-list"></div>
-        <button onclick="hostStartGame()" style="background:#2ecc71;">이 신분으로 다음 판</button>
-        <button onclick="location.reload()" style="background:#e74c3c;">완전 처음부터</button>
-    </div>
-
 <script>
-    // 이미지 로딩을 위해 원본 소스 주소 사용
     const gun = Gun(['https://gun-manhattan.herokuapp.com/gun']);
-    const IMG_BASE = "https://raw.githubusercontent.com/hmkim199/java-dalmuti/master/src/dalmuti/img/";
+    // [수정] 이미지를 가장 확실하게 불러오는 CDN 주소 사용
+    const IMG_BASE = "https://cdn.jsdelivr.net/gh/hmkim199/java-dalmuti@master/src/dalmuti/img/";
     let room, myName, myId, gameState = {}, selectedCards = [];
 
     function joinGame() {
@@ -73,7 +66,7 @@
         myName = document.getElementById('my-name').value.trim();
         if(!rId || !myName) return alert("방 이름과 이름을 입력하세요.");
         myId = 'p_' + Math.random().toString(36).substr(2, 5);
-        room = gun.get('dalmuti_multi_v3_' + rId); // 방 이름 변경 시 초기화되도록 버전업
+        room = gun.get('dalmuti_v4_' + rId); // 버전을 올려서 이전 데이터와 분리
         room.get('players').get(myId).put({ name: myName, id: myId });
         showScreen('lobby-screen');
         room.get('players').map().on(() => {
@@ -85,7 +78,6 @@
             if(!s) return;
             gameState = JSON.parse(s);
             if(gameState.status === 'playing') { showScreen('game-screen'); renderGame(); }
-            else if(gameState.status === 'result') { showScreen('result-screen'); renderResults(); }
         });
     }
 
@@ -93,9 +85,6 @@
         let pList = [];
         room.get('players').once(data => {
             Object.keys(data).forEach(k => { if(data[k] && data[k].name) pList.push({id: data[k].id, name: data[k].name}); });
-            if(gameState.status === 'result') {
-                pList = gameState.players.map(p => ({id: p.id, name: p.name}));
-            }
             let deck = [];
             for (let i = 1; i <= 12; i++) for (let j = 0; j < i; j++) deck.push(i);
             deck.push(13, 13); deck.sort(() => Math.random() - 0.5);
@@ -110,10 +99,9 @@
         const turnPlayer = gameState.players[gameState.turnIdx];
         document.getElementById('turn-info').innerText = `📢 [${turnPlayer.name}] 님의 차례`;
         const rb = document.getElementById('rank-board');
-        rb.innerHTML = gameState.players.map((p, i) => `<span class="badge ${i==0?'badge-1':''} ${gameState.finishedIds.includes(p.id)?'finished':''}">[${i+1}등] ${p.name}</span>`).join(' ');
+        rb.innerHTML = gameState.players.map((p, i) => `<span>[${i+1}등] ${p.name}</span>`).join(' ');
         const tableDiv = document.getElementById('table-cards');
         tableDiv.innerHTML = gameState.lastPlayed.cards.map(r => `<div class="card"><div class="card-number">${r==13?'J':r}</div><img src="${IMG_BASE}${r}.png" onerror="this.style.display='none'"></div>`).join('');
-        document.getElementById('status-msg').innerText = gameState.lastPlayed.count > 0 ? `${gameState.lastPlayed.rank}번보다 좋은 카드 ${gameState.lastPlayed.count}장을 내세요.` : "원하는 카드를 내세요!";
         const handDiv = document.getElementById('my-hand');
         handDiv.innerHTML = "";
         selectedCards = [];
@@ -148,25 +136,13 @@
     }
 
     function nextTurn() {
-        if(gameState.finishedIds.length >= gameState.players.length - 1) {
-            const lastId = gameState.players.find(p => !gameState.finishedIds.includes(p.id)).id;
-            gameState.finishedIds.push(lastId);
-            gameState.status = 'result';
-            gameState.players = gameState.finishedIds.map(id => gameState.players.find(p => p.id === id));
-        } else {
-            do { gameState.turnIdx = (gameState.turnIdx + 1) % gameState.players.length; } 
-            while(gameState.finishedIds.includes(gameState.players[gameState.turnIdx].id));
-        }
+        do { gameState.turnIdx = (gameState.turnIdx + 1) % gameState.players.length; } 
+        while(gameState.finishedIds.includes(gameState.players[gameState.turnIdx].id));
         room.get('state').put(JSON.stringify(gameState));
     }
 
-    function renderResults() {
-        showScreen('result-screen');
-        document.getElementById('rank-list').innerHTML = gameState.players.map((p, i) => `<div>${i+1}위: ${p.name}</div>`).join('');
-    }
-
     function showScreen(id) {
-        ['setup-screen', 'lobby-screen', 'game-screen', 'result-screen'].forEach(s => document.getElementById(s).classList.add('hidden'));
+        ['setup-screen', 'lobby-screen', 'game-screen'].forEach(s => document.getElementById(s).classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
     }
 </script>
