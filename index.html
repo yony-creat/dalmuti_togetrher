@@ -332,13 +332,35 @@ function submitTax() {
     function updateUI() {
         const me = players.find(p => p.id === myID);
         const isMyTurn = players[currentPlayerIdx].id === myID;
-        document.getElementById('turn-display').innerText = isMyTurn ? "🔴 내 차례!" : `⌛ ${players[currentPlayerIdx].name} 차례`;
-        document.getElementById('rank-board').innerHTML = players.map(p => `<span class="rank-badge">${p.name}(${p.hand.length})</span>`).join('');
-        renderHand('my-hand', me.hand, isMyTurn);
-        const table = document.getElementById('table-cards'); table.innerHTML = '';
-        if(lastPlayed.count>0) for(let i=0; i<lastPlayed.count; i++) table.innerHTML += `<div class="card">${lastPlayed.rank===13?'J':lastPlayed.rank}</div>`;
-    }
+        
+        // [수정] 바닥이 청소되었을 때 문구 강조
+        let turnMsg = isMyTurn ? "🔴 내 차례!" : `⌛ ${players[currentPlayerIdx].name} 차례`;
+        if (isMyTurn && lastPlayed.count === 0) {
+            turnMsg = "✨ 바닥 청소됨! 원하는 카드를 내세요! ✨";
+        }
+        document.getElementById('turn-display').innerText = turnMsg;
 
+        // 상단 플레이어 리스트 및 카드 수
+        document.getElementById('rank-board').innerHTML = players.map(p => 
+            `<span class="rank-badge">${p.name}(${p.hand.length})</span>`
+        ).join('');
+
+        // 내 손패 그리기
+        renderHand('my-hand', me.hand, isMyTurn);
+
+        // [수정] 테이블 중앙 카드 영역 표시
+        const table = document.getElementById('table-cards'); 
+        table.innerHTML = '';
+        if(lastPlayed.count > 0) {
+            for(let i=0; i<lastPlayed.count; i++) {
+                table.innerHTML += `<div class="card">${lastPlayed.rank===13?'J':lastPlayed.rank}</div>`;
+            }
+        } else {
+            // 바닥이 비었을 때 시각적 안내 추가
+            table.innerHTML = `<div style="color:#aaa; font-style:italic; margin-top:40px;">🧹 바닥이 청소되었습니다.</div>`;
+        }
+    }
+    
     function renderHand(cid, hand, active) {
         const cont = document.getElementById(cid); cont.innerHTML = ''; selectedCards = [];
         hand.forEach((r, i) => {
@@ -364,11 +386,20 @@ function submitTax() {
     }
 
     function passTurn() { if(isHost) doPass(); else conn.send({type:'PASS_REQ'}); }
-    function doPass() { 
-        passCount++; if(passCount >= players.filter(p=>!p.isFinished).length - 1) lastPlayed = {rank:14, count:0};
-        nextTurn();
+ function doPass() { 
+        // 현재 게임 중인(탈출 안 한) 인원 확인
+        const activePlayers = players.filter(p => !p.isFinished).length;
+        passCount++; 
+        
+        // [수정] 나를 제외한 모든 사람이 패스하면 바닥 청소
+        if(passCount >= activePlayers - 1) { 
+            lastPlayed = { rank: 14, count: 0 };
+            passCount = 0;
+            // 바닥 청소됨을 알리기 위해 즉시 UI 업데이트 및 방송
+        }
+        
+        nextTurn(); 
     }
-
     function nextTurn() {
         do { currentPlayerIdx = (currentPlayerIdx + 1) % players.length; } while(players[currentPlayerIdx].isFinished);
         const msg = {type:'GAME_START', players, turn:currentPlayerIdx, last:lastPlayed}; handleData(msg); broadcast(msg);
