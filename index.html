@@ -13,38 +13,38 @@
         .screen { background: rgba(0,0,0,0.7); padding: 20px; border-radius: 15px; max-width: 500px; margin: 10px auto; border: 1px solid #34495e; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         .card-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 15px; min-height: 110px; }
         .card { 
-            width: 60px; height: 90px; background: var(--card-bg); border-radius: 8px; 
+            width: 65px; height: 95px; background: var(--card-bg); border-radius: 8px; 
             border: 2px solid #333; cursor: pointer; display: flex; align-items: center; 
-            justify-content: center; color: #2c3e50; font-weight: bold; font-size: 24px;
+            justify-content: center; color: #2c3e50; font-weight: bold; font-size: 28px;
             box-shadow: 2px 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s;
         }
         .card.selected { transform: translateY(-15px); border: 3px solid #e67e22; background: #fff9e6; }
-        .card.disabled { opacity: 0.5; cursor: default; background: #bdc3c7; }
+        .card.disabled { opacity: 0.6; cursor: default; background: #bdc3c7; color: #7f8c8d; }
         #rank-board { background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 10px; margin-bottom: 15px; display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
         .rank-badge { padding: 5px 10px; border-radius: 15px; font-size: 0.8rem; background: #34495e; border: 1px solid var(--accent); }
         button { padding: 12px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; width: 85%; font-size: 16px; }
         .hidden { display: none !important; }
         input { padding: 12px; width: 80%; border-radius: 5px; border: 2px solid #34495e; font-size: 16px; margin-bottom: 10px; text-align: center; }
         .turn-msg { font-size: 1.1rem; color: var(--accent); font-weight: bold; margin: 10px 0; }
-        .table-area { min-height: 120px; background: rgba(255,255,255,0.05); border-radius: 10px; margin: 15px 0; padding: 10px; border: 1px dashed #555; display: flex; align-items: center; justify-content: center; }
+        .role-item { margin: 8px 0; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.1); text-align: left; border-left: 4px solid var(--accent); }
     </style>
 </head>
 <body>
-    <div id="status-bar">서버 연결 대기 중...</div>
+    <div id="status-bar">서버 연결 중...</div>
 
     <div id="setup" class="screen">
-        <h2 style="color:var(--accent)">🏰 달무티 온라인</h2>
+        <h2 style="color:var(--accent)">🏰 달무티</h2>
         <input type="text" id="my-name" placeholder="닉네임 입력" maxlength="8">
         <button onclick="initPeer(true)">방 만들기 (방장)</button>
         <hr style="border:0.5px solid #444; margin:15px 0;">
-        <input type="text" id="join-id" placeholder="방 코드가 자동으로 입력됩니다">
+        <input type="text" id="join-id" placeholder="방 코드가 자동 입력됩니다">
         <button onclick="initPeer(false)" style="background:#2980b9;">방 참여하기</button>
     </div>
 
     <div id="lobby" class="screen hidden">
         <h3>📢 대기실</h3>
-        <button onclick="copyRoomLink()" style="background:#8e44ad; width:auto; padding:8px 15px; margin-bottom:10px;">🔗 초대 링크 복사</button>
-        <div id="player-list-lobby" style="margin: 10px 0;"></div>
+        <button onclick="copyRoomLink()" style="background:#8e44ad; width:auto; padding:8px 15px;">🔗 초대 링크 복사</button>
+        <div id="player-list-lobby" style="margin: 20px 0;"></div>
         <button id="start-btn" onclick="hostStartRoleDraw()" class="hidden">서열 정하기 시작</button>
     </div>
 
@@ -66,7 +66,7 @@
     <div id="game-board" class="screen hidden">
         <div id="rank-board"></div>
         <div id="turn-display" class="turn-msg"></div>
-        <div class="table-area"><div id="table-cards" class="card-container"></div></div>
+        <div id="table-cards" class="card-container" style="min-height:120px; background:rgba(255,255,255,0.05); border-radius:10px; padding:10px;"></div>
         <div id="my-hand" class="card-container"></div>
         <div style="margin-top:15px;">
             <button onclick="playCards()">카드 내기</button>
@@ -78,20 +78,17 @@
     let peer, conn, connections = [];
     let isHost = false, myID = "", myName = "";
     let players = [], currentPlayerIdx = 0, lastPlayed = {rank:14, count:0}, selectedCards = [], passCount = 0;
-    let finishOrder = [], taxStorage = [];
-    let roleDrawingIdx = 0, roleDeck = [];
+    let taxStorage = [], roleDrawingIdx = 0, roleDeck = [];
 
-    // [복구됨] 페이지 로드 시 URL 파라미터에서 방 코드를 읽어오는 로직
     window.onload = () => {
         const urlParams = new URLSearchParams(window.location.search);
         const room = urlParams.get('room');
         if (room) document.getElementById('join-id').value = room;
     };
 
-    // [복구됨] 초대 링크 복사 기능
     function copyRoomLink() {
         const link = `${window.location.origin}${window.location.pathname}?room=${myID}`;
-        navigator.clipboard.writeText(link).then(() => alert("초대 링크가 복사되었습니다!"));
+        navigator.clipboard.writeText(link).then(() => alert("링크가 복사되었습니다!"));
     }
 
     function initPeer(host) {
@@ -101,9 +98,8 @@
         peer = new Peer();
         peer.on('open', id => {
             myID = id;
-            const status = document.getElementById('status-bar');
-            status.innerText = isHost ? "방장이 되었습니다" : "연결되었습니다";
-            status.classList.add('online');
+            document.getElementById('status-bar').innerText = isHost ? "방장이 되었습니다" : "연결됨";
+            document.getElementById('status-bar').classList.add('online');
             if(isHost) {
                 players.push({id, name:myName, hand:[], isFinished:false});
                 showScreen('lobby'); updateLobby();
@@ -131,9 +127,8 @@
                 break;
             case 'LOBBY': players = data.players; updateLobby(); showScreen('lobby'); break;
             case 'START_DRAW_PHASE':
-                roleDrawingIdx = data.drawingIdx;
-                showRoleDrawScreen(data.playerCount);
-                updateRoleTurnMsg();
+                players = data.players; roleDrawingIdx = 0;
+                showRoleDrawScreen(players.length); updateRoleTurnMsg();
                 break;
             case 'ROLE_PICKED': if(isHost) processRolePick(data.cardIdx, c.peer); break;
             case 'ROLE_OPEN':
@@ -146,10 +141,10 @@
             case 'DALMUTI_WAIT':
                 taxStorage = data.taxCards;
                 if(players[0].id === myID) {
-                    document.getElementById('tax-instruction').innerHTML = "농노가 조공을 바쳤습니다.<br><b>카드 2장</b>을 선택해 하사하십시오.";
+                    document.getElementById('tax-instruction').innerHTML = "농노의 조공 도착!<br>하사할 <b>카드 2장</b>을 고르세요.";
                     document.getElementById('tax-btn').classList.remove('hidden');
                     renderHand('tax-hand', players[0].hand, true);
-                } else { document.getElementById('tax-instruction').innerText = "달무티가 하사할 카드를 고르는 중..."; }
+                } else { document.getElementById('tax-instruction').innerText = "달무티가 고르는 중..."; }
                 break;
             case 'GAME_START':
                 players = data.players; currentPlayerIdx = data.turn; lastPlayed = data.last;
@@ -162,40 +157,11 @@
 
     function broadcast(data) { connections.forEach(c => c.send(data)); }
 
-    // [서열 정하기]
     function hostStartRoleDraw() {
         roleDeck = Array.from({length: 12}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
         roleDrawingIdx = 0;
-        const msg = {type:'START_DRAW_PHASE', playerCount: players.length, drawingIdx: 0};
+        const msg = {type:'START_DRAW_PHASE', players: players};
         handleData(msg); broadcast(msg);
-    }
-
-    function showRoleDrawScreen(count) {
-        showScreen('role-draw');
-        const container = document.getElementById('role-cards');
-        container.innerHTML = '';
-        document.getElementById('role-results').innerHTML = '';
-        for(let i=0; i<count; i++) {
-            const card = document.createElement('div');
-            card.className = 'card'; card.id = `role-card-${i}`; card.innerText = '?';
-            card.onclick = () => tryPickRole(i);
-            container.appendChild(card);
-        }
-    }
-
-    function updateRoleTurnMsg() {
-        if (roleDrawingIdx >= players.length) return;
-        const p = players[roleDrawingIdx];
-        const isMyTurn = p.id === myID;
-        document.getElementById('role-turn-msg').innerText = isMyTurn ? "🔴 당신의 차례! 카드를 하나 고르세요." : `⌛ ${p.name}님이 뽑는 중...`;
-    }
-
-    function tryPickRole(cardIdx) {
-        if(players[roleDrawingIdx].id !== myID) return alert("자기 차례가 아닙니다!");
-        const card = document.getElementById(`role-card-${cardIdx}`);
-        if(card.classList.contains('disabled')) return;
-        if(isHost) processRolePick(cardIdx, myID);
-        else conn.send({type:'ROLE_PICKED', cardIdx});
     }
 
     function processRolePick(cardIdx, pickerID) {
@@ -210,8 +176,30 @@
 
     function renderOpenedRole(idx, rank, name) {
         const card = document.getElementById(`role-card-${idx}`);
-        if(card) { card.innerHTML = rank; card.classList.add('disabled'); card.style.background = "#fff9e6"; }
+        if(card) { card.innerText = rank; card.classList.add('disabled'); }
         document.getElementById('role-results').innerHTML += `<div class="role-item">👤 ${name}: <b>${rank}</b></div>`;
+    }
+
+    function showRoleDrawScreen(count) {
+        showScreen('role-draw');
+        const container = document.getElementById('role-cards');
+        container.innerHTML = ''; document.getElementById('role-results').innerHTML = '';
+        for(let i=0; i<count; i++) {
+            container.innerHTML += `<div class="card" id="role-card-${i}" onclick="tryPickRole(${i})">?</div>`;
+        }
+    }
+
+    function tryPickRole(cardIdx) {
+        if(players[roleDrawingIdx].id !== myID) return alert("자기 차례가 아닙니다!");
+        if(document.getElementById(`role-card-${cardIdx}`).classList.contains('disabled')) return;
+        if(isHost) processRolePick(cardIdx, myID);
+        else conn.send({type:'ROLE_PICKED', cardIdx});
+    }
+
+    function updateRoleTurnMsg() {
+        if (roleDrawingIdx >= players.length) return;
+        const p = players[roleDrawingIdx];
+        document.getElementById('role-turn-msg').innerText = (p.id === myID) ? "🔴 당신의 차례! 카드를 뽑으세요." : `⌛ ${p.name}님이 뽑는 중...`;
     }
 
     function finalizeRoles() {
@@ -229,35 +217,26 @@
         const msg = {type:'TAX_START', players}; handleData(msg); broadcast(msg);
     }
 
-    // [세금 및 하사 - 농노 검증 포함]
     function startTaxPhase() {
         showScreen('tax-phase');
         const isPeon = (players[players.length-1].id === myID);
         const me = players.find(p => p.id === myID);
         document.getElementById('tax-btn').classList.toggle('hidden', !isPeon);
-        document.getElementById('tax-msg').innerText = "";
         if(isPeon) {
-            document.getElementById('tax-instruction').innerHTML = "<b>농노</b>님, 달무티에게 바칠 <br><b>가장 좋은 카드 2장</b>을 선택하세요.";
+            document.getElementById('tax-instruction').innerHTML = "<b>농노</b>님, 가장 좋은 카드 2장을 내세요.";
             renderHand('tax-hand', me.hand, true);
-        } else {
-            document.getElementById('tax-instruction').innerText = "세금 단계를 기다리는 중입니다...";
-        }
+        } else { document.getElementById('tax-instruction').innerText = "농노의 세금을 기다리는 중..."; }
     }
 
     function submitTax() {
-        if(selectedCards.length !== 2) return alert("2장을 선택하세요.");
+        if(selectedCards.length !== 2) return alert("2장을 고르세요.");
         const pIdx = players.findIndex(p => p.id === myID);
         if(pIdx === players.length-1) { // 농노 검증
             const best = [...players[pIdx].hand].sort((a,b)=>a-b).slice(0,2);
             const mine = selectedCards.map(s=>s.rank).sort((a,b)=>a-b);
-            if(mine[0]!==best[0] || mine[1]!==best[1]) {
-                document.getElementById('tax-msg').innerText = `농노 네 이놈! 감히 거짓을 고하다니! ${best[0]}번, ${best[1]}번 카드를 내놓아라!`;
-                return;
-            }
+            if(mine[0]!==best[0] || mine[1]!==best[1]) return alert(`농노 네 이놈! (${best[0]}, ${best[1]}을 내야 함)`);
             if(isHost) handlePeonTax(selectedCards); else conn.send({type:'PEON_TAX', cards:selectedCards});
-        } else { // 달무티 하사
-            handleDalTax(selectedCards);
-        }
+        } else { handleDalTax(selectedCards); }
     }
 
     function handlePeonTax(cards) {
@@ -283,14 +262,13 @@
         document.getElementById('rank-board').innerHTML = players.map(p => `<span class="rank-badge">${p.name}(${p.hand.length})</span>`).join('');
         renderHand('my-hand', me.hand, isMyTurn);
         const table = document.getElementById('table-cards'); table.innerHTML = '';
-        if(lastPlayed.count>0) for(let i=0; i<lastPlayed.count; i++) table.innerHTML += `<div class="card">${lastPlayed.rank}</div>`;
+        if(lastPlayed.count>0) for(let i=0; i<lastPlayed.count; i++) table.innerHTML += `<div class="card">${lastPlayed.rank===13?'J':lastPlayed.rank}</div>`;
     }
 
     function renderHand(cid, hand, active) {
         const cont = document.getElementById(cid); cont.innerHTML = ''; selectedCards = [];
         hand.forEach((r, i) => {
-            const c = document.createElement('div'); c.className = 'card';
-            c.innerHTML = (r===13?'J':r);
+            const c = document.createElement('div'); c.className = 'card'; c.innerText = (r===13?'J':r);
             c.onclick = () => { if(active) { c.classList.toggle('selected'); const si = selectedCards.findIndex(s=>s.idx===i); if(si>-1) selectedCards.splice(si,1); else selectedCards.push({rank:r, idx:i}); }};
             cont.appendChild(c);
         });
@@ -299,6 +277,7 @@
     function playCards() {
         if(!selectedCards.length) return;
         const rank = selectedCards[0].rank;
+        if(lastPlayed.count>0 && (selectedCards.length!==lastPlayed.count || rank>=lastPlayed.rank)) return alert("낼 수 없습니다.");
         if(isHost) doPlay(rank, selectedCards.length, players.findIndex(p=>p.id===myID));
         else conn.send({type:'PLAY_REQ', rank, count:selectedCards.length, pIdx: players.findIndex(p=>p.id===myID)});
     }
@@ -317,8 +296,6 @@
     }
 
     function nextTurn() {
-        const active = players.filter(p => !p.isFinished);
-        if(active.length <= 1) { location.reload(); return; } // 게임 종료 시 리로드 (간단히)
         do { currentPlayerIdx = (currentPlayerIdx + 1) % players.length; } while(players[currentPlayerIdx].isFinished);
         const msg = {type:'GAME_START', players, turn:currentPlayerIdx, last:lastPlayed}; handleData(msg); broadcast(msg);
     }
