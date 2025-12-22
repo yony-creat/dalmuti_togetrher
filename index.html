@@ -407,30 +407,34 @@ function playCards() {
     // 1. 조커(13)를 제외한 일반 카드들만 추출
     const nonJokerCards = selectedCards.filter(c => c.rank !== 13);
     
-    // [규칙] 조커만 단독으로 낼 수는 없음
+    // 조커만 단독으로 낼 수 없음
     if (nonJokerCards.length === 0) {
-        return alert("조커는 단독으로 낼 수 없습니다! 일반 카드와 함께 내세요.");
+        alert("조커는 단독으로 낼 수 없습니다!");
+        resetSelection(); // ★ 잘못 선택했을 때 리셋
+        return;
     }
 
-    // 2. 변신할 숫자 결정 (일반 카드의 숫자)
+    // 2. 변신할 숫자와 전체 장수 계산
     const effectiveRank = nonJokerCards[0].rank;
-    
-    // 3. ★중요★ 전체 장수 계산 (일반 카드 수 + 조커 수)
     const totalCount = selectedCards.length; 
 
-    // 4. 일반 카드들이 모두 같은 숫자인지 확인 (예: 3번 2개 + 4번 1개 + 조커 혼합 방지)
+    // 3. ★ 문제의 구간 ★ : 서로 다른 숫자가 섞여있는지 확인
     if (!nonJokerCards.every(c => c.rank === effectiveRank)) {
-        return alert("서로 다른 숫자의 카드는 함께 낼 수 없습니다.");
+        alert("서로 다른 숫자의 카드는 함께 낼 수 없습니다! 선택이 초기화됩니다.");
+        resetSelection(); // ★ 11, 11, 10 처럼 잘못 고르면 싹 비워줌
+        return;
     }
 
-    // 5. 바닥에 깔린 카드와 비교 (장수는 같아야 하고 숫자는 낮아야 함)
+    // 4. 바닥 카드와 비교
     if(lastPlayed.count > 0) {
         if(totalCount !== lastPlayed.count || effectiveRank >= lastPlayed.rank) {
-            return alert(`${lastPlayed.count}장으로 ${lastPlayed.rank}보다 낮은 숫자를 내야 합니다.`);
+            alert(`${lastPlayed.count}장으로 ${lastPlayed.rank}보다 낮은 숫자를 내야 합니다.`);
+            resetSelection(); // ★ 조건 안 맞을 때도 리셋
+            return;
         }
     }
 
-    // 6. 서버(방장)로 변신한 숫자(effectiveRank)와 합쳐진 장수(totalCount) 전송
+    // 5. 정상적인 경우 서버 전송
     const myIdx = players.findIndex(p => p.id === myID);
     if(isHost) {
         doPlay(effectiveRank, totalCount, myIdx);
@@ -442,6 +446,13 @@ function playCards() {
             pIdx: myIdx
         });
     }
+}
+
+// ✨ 선택을 강제로 비워주는 보조 함수
+function resetSelection() {
+    selectedCards = []; // 데이터 비우기
+    const cards = document.querySelectorAll('.card');
+    cards.forEach(c => c.classList.remove('selected')); // 화면에서 주황색 테두리 제거
 }
 
  function doPlay(rank, count, pIdx) {
