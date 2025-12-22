@@ -401,33 +401,61 @@ function submitTax() {
         });
     }
 
-    function playCards() {
-        if(!selectedCards.length) return;
-        const rank = selectedCards[0].rank;
-        if(lastPlayed.count>0 && (selectedCards.length!==lastPlayed.count || rank>=lastPlayed.rank)) return alert("낼 수 없습니다.");
-        if(isHost) doPlay(rank, selectedCards.length, players.findIndex(p=>p.id===myID));
-        else conn.send({type:'PLAY_REQ', rank, count:selectedCards.length, pIdx: players.findIndex(p=>p.id===myID)});
+  function playCards() {
+    if(!selectedCards.length) return;
+
+    // 1. 조커(13)가 아닌 카드가 있는지 확인
+    const nonJokerCards = selectedCards.filter(c => c.rank !== 13);
+    
+    // 2. 조커만 선택했는지 체크 (조커 단독 사용 금지 규칙 적용 시)
+    if (nonJokerCards.length === 0) {
+        return alert("조커는 단독으로 낼 수 없습니다! 다른 카드와 함께 사용하세요.");
     }
 
-function doPlay(rank, count, pIdx) {
-        lastPlayed = {rank, count};
-        // 카드 제거
-        for(let i=0; i<count; i++) {
-            const index = players[pIdx].hand.indexOf(rank);
-            if (index > -1) players[pIdx].hand.splice(index, 1);
-        }
-        
-        // 탈출 처리
-        if(players[pIdx].hand.length === 0 && !players[pIdx].isFinished) {
-            players[pIdx].isFinished = true;
-            finishOrder.push(players[pIdx]); // 탈출 명단에 추가
-            alert(`🎊 ${players[pIdx].name}님 ${finishOrder.length}등으로 탈출! 🎊`);
-        }
-        
-        passCount = 0; 
-        nextTurn();
+    // 3. 조커가 아닌 카드의 숫자를 '변신할 숫자'로 정함
+    // (모두 같은 숫자여야 하므로 첫 번째 nonJoker의 숫자를 사용)
+    const effectiveRank = nonJokerCards[0].rank;
+    const count = selectedCards.length;
+
+    // 4. 선택된 카드들 중 조커가 아닌 카드들이 모두 같은 숫자인지 검증
+    const isAllSame = nonJokerCards.every(c => c.rank === effectiveRank);
+    if (!isAllSame) {
+        return alert("서로 다른 숫자의 카드를 섞어서 낼 수 없습니다!");
     }
 
+    // 5. 기존 바닥 카드와 비교 (더 낮은 숫자여야 함)
+    if(lastPlayed.count > 0) {
+        if(count !== lastPlayed.count || effectiveRank >= lastPlayed.rank) {
+            return alert(`${lastPlayed.count}장으로 ${lastPlayed.rank}보다 낮은 숫자를 내야 합니다.`);
+        }
+    }
+
+    // 6. 서버(방장)에 전송
+    if(isHost) doPlay(effectiveRank, count, players.findIndex(p => p.id === myID));
+    else conn.send({type:'PLAY_REQ', rank: effectiveRank, count: count, pIdx: players.findIndex(p => p.id === myID)});
+}
+
+    function doPlay(rank, count, pIdx) {
+    lastPlayed = {rank, count};
+
+    // [중요] 사용자가 화면에서 선택한 카드의 실제 인덱스를 가져와서 제거합니다.
+    // 큰 인덱스부터 지워야 배열의 순서가 꼬이지 않습니다.
+    const targetIndices = selectedCards.map(s => s.idx).sort((a, b) => b - a);
+    
+    targetIndices.forEach(idx => {
+        players[pIdx].hand.splice(idx, 1);
+    });
+    
+    // 탈출 처리
+    if(players[pIdx].hand.length === 0 && !players[pIdx].isFinished) {
+        players[pIdx].isFinished = true;
+        finishOrder.push(players[pIdx]);
+        alert(`🎊 ${players[pIdx].name}님 ${finishOrder.length}등으로 탈출! 🎊`);
+    }
+    
+    passCount = 0; 
+    nextTurn();
+}
     function passTurn() { if(isHost) doPass(); else conn.send({type:'PASS_REQ'}); }
  function doPass() { 
         // 현재 게임 중인(탈출 안 한) 인원 확인
