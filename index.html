@@ -164,6 +164,7 @@
             case 'PLAY_REQ': if(isHost) doPlay(data.rank, data.count, data.pIdx); break;
             case 'PASS_REQ': if(isHost) doPass(); break;
             case 'PEON_TAX': if(isHost) handlePeonTax(data.cards); break;
+            case 'DAL_TAX_REQ': if(isHost) handleDalTax(data.cards); break;
         }
     }
     function broadcast(data) { connections.forEach(c => c.send(data)); }
@@ -238,16 +239,36 @@
             renderHand('tax-hand', me.hand, true);
         } else { document.getElementById('tax-instruction').innerText = "농노의 세금을 기다리는 중..."; }
     }
-
-    function submitTax() {
+function submitTax() {
         if(selectedCards.length !== 2) return alert("2장을 고르세요.");
-        const pIdx = players.findIndex(p => p.id === myID);
-        if(pIdx === players.length-1) { // 농노 검증
+        
+        const isPeon = (players[players.length - 1].id === myID); // 내가 농노인지 확인
+        const isDalmuti = (players[0].id === myID); // 내가 달무티인지 확인
+
+        if(isPeon) { 
+            // 1. 농노 검증 로직
+            const pIdx = players.findIndex(p => p.id === myID);
             const best = [...players[pIdx].hand].sort((a,b)=>a-b).slice(0,2);
             const mine = selectedCards.map(s=>s.rank).sort((a,b)=>a-b);
-            if(mine[0]!==best[0] || mine[1]!==best[1]) return alert(`농노 네 이놈! (${best[0]}, ${best[1]}을 내야 함)`);
-            if(isHost) handlePeonTax(selectedCards); else conn.send({type:'PEON_TAX', cards:selectedCards});
-        } else { handleDalTax(selectedCards); }
+            
+            if(mine[0]!==best[0] || mine[1]!==best[1]) {
+                return alert(`농노 네 이놈! (${best[0]}, ${best[1]}번 카드를 내야 함)`);
+            }
+            
+            // 농노가 방장이면 직접 처리, 참여자면 방장에게 전송
+            if(isHost) handlePeonTax(selectedCards); 
+            else conn.send({type:'PEON_TAX', cards:selectedCards});
+
+        } else if(isDalmuti) {
+            // 2. 달무티 하사 로직 (이 부분이 수정되어야 함)
+            if(isHost) {
+                // 달무티가 방장인 경우 직접 실행
+                handleDalTax(selectedCards); 
+            } else {
+                // 달무티가 참여자인 경우 방장에게 하사품 정보를 보냄
+                conn.send({type:'DAL_TAX_REQ', cards:selectedCards});
+            }
+        }
     }
 
   // [방장 전용] 농노의 조공을 처리하고 달무티에게 턴을 넘깁니다.
@@ -265,7 +286,36 @@
         handleData(msg); 
         broadcast(msg); 
     }
+// [방장 전용] 달무티가 하사한 카드를 처리하고 게임을 진짜로 시작합니다.
+    function handleDalTax(cards) {
+        if (!isHost) return; // 방장만 실행하는 로직입니다.
 
+        const dal = players[0];
+        const peon = players[players.length - 1];
+
+        // 1. 달무티의 손패에서 선택한 카드 제거 후 농노에게 전달
+        // 인덱스 꼬임 방지를 위해 뒤에서부터 제거합니다.
+        cards.sort((a, b) => b.idx - a.idx).forEach(c => {
+            peon.hand.push(dal.hand.splice(c.idx, 1)[0]);
+        });
+
+        // 2. 농노가 아까 바쳤던 조공(taxStorage)을 달무티의 손패에 추가
+        dal.hand.push(...taxStorage);
+
+        // 3. 모든 플레이어의 손패를 다시 숫자 순서대로 정렬
+        players.forEach(p => p.hand.sort((a, b) => a - b));
+
+        // 4. 모든 참여자에게 "이제 게임 시작이다!"라고 신호를 보냅니다.
+        const msg = {
+            type: 'GAME_START',
+            players: players,
+            turn: 0, // 달무티(방장)부터 시작
+            last: { rank: 14, count: 0 }
+        };
+
+        handleData(msg); // 방장 본인 화면을 게임판으로 전환
+        broadcast(msg);  // 참여자(농노 등)의 화면을 게임판으로 강제 전환
+    }
     // [표시 전용] 상단에 달무티와 농노 정보를 실시간으로 보여줍니다.
     function updateStatusBar() {
         if (players.length < 2) return;
