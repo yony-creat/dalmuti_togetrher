@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>달무티 - 멀티 강화 버전</title>
+    <title>달무티 - 멀티 최종</title>
     <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <style>
         :root { --bg-color: #1a252f; --accent: #f1c40f; }
@@ -20,29 +20,30 @@
         .hidden { display: none; }
         #rank-board { background: rgba(255,255,255,0.1); padding: 10px; border-radius: 10px; margin-bottom: 10px; font-size: 0.8rem; border: 1px solid var(--accent); }
         #conn-status { font-size: 0.7rem; color: #888; margin-bottom: 10px; }
+        .player-tag { background: #34495e; padding: 5px 10px; border-radius: 20px; margin: 5px; display: inline-block; font-size: 0.9rem; }
     </style>
 </head>
 <body>
     <h2 style="color:var(--accent)">🏰 달무티</h2>
-    <div id="conn-status">서버 연결 시도 중...</div>
+    <div id="conn-status">연결 확인 중...</div>
 
     <div id="setup-screen" class="screen">
-        <p>가족 모두 같은 방 이름을 입력하세요.</p>
-        <input type="text" id="room-id" placeholder="방 이름 (예: 달무티1)" autocomplete="off">
+        <p>방 이름은 영문/숫자 조합을 추천합니다.</p>
+        <input type="text" id="room-id" placeholder="방 이름 (예: dalmuti77)" autocomplete="off">
         <input type="text" id="my-name" placeholder="내 이름" autocomplete="off">
         <button onclick="joinGame()">접속하기</button>
     </div>
 
     <div id="lobby-screen" class="screen hidden">
         <h3>대기실</h3>
-        <p style="font-size:0.8rem; color:#aaa;">상대방이 안 보이면 와이파이를 끄고 접속해 보세요.</p>
+        <p style="font-size:0.8rem; color:#aaa;">모든 플레이어가 아래 목록에 뜨는지 확인하세요.</p>
         <div id="lobby-players" style="margin-bottom:20px; min-height: 50px;"></div>
-        <button id="start-btn" onclick="hostStartGame()">모두 모임! 시작</button>
+        <button onclick="hostStartGame()">모두 모임! 시작</button>
     </div>
 
     <div id="game-screen" class="screen hidden">
         <div id="rank-board"></div>
-        <div id="turn-info" style="color:#3498db; font-weight:bold; margin-bottom:10px;">차례 대기...</div>
+        <div id="turn-info" style="color:#3498db; font-weight:bold; margin-bottom:10px;"></div>
         <div id="table-cards" class="card-container" style="background:rgba(255,255,255,0.05); min-height:100px; border-radius:10px;"></div>
         <div id="my-hand" class="card-container"></div>
         <div id="controls" class="hidden">
@@ -52,83 +53,82 @@
     </div>
 
 <script>
-    // [보안 우회] 여러 개의 서버 주소를 사용하여 하나가 막혀도 다른 곳으로 연결 시도
+    // 여러 릴레이 서버를 사용하여 동기화 성능 극대화
     const gun = Gun([
         'https://gun-manhattan.herokuapp.com/gun',
-        'https://gun-us.herokuapp.com/gun',
-        'https://gun-eu.herokuapp.com/gun'
+        'https://gun-us.herokuapp.com/gun'
     ]);
     
     const IMG_BASE = "https://cdn.jsdelivr.net/gh/hmkim199/java-dalmuti@master/src/dalmuti/img/";
     let room, myName, myId, gameState = {}, selectedCards = [];
+    let playersInLobby = {}; // 중복 제거용 객체
 
-    // 서버 연결 상태 표시
-    gun.on('hi', () => document.getElementById('conn-status').innerText = "🟢 서버 연결됨");
-    gun.on('bye', () => document.getElementById('conn-status').innerText = "🔴 연결 끊김 (데이터 모드 권장)");
+    gun.on('hi', () => document.getElementById('conn-status').innerText = "🟢 실시간 연결됨");
+    gun.on('bye', () => document.getElementById('conn-status').innerText = "🟡 연결 불안정");
 
     function joinGame() {
         const rId = document.getElementById('room-id').value.trim();
         myName = document.getElementById('my-name').value.trim();
-        if(!rId || !myName) return alert("방 이름과 이름을 모두 입력하세요.");
+        if(!rId || !myName) return alert("방 이름과 이름을 입력하세요.");
         
-        myId = 'p_' + Math.random().toString(36).substr(2, 5);
-        room = gun.get('dalmuti_ultra_v5_' + rId); // 버전업으로 데이터 초기화
+        myId = 'id_' + Math.random().toString(36).substr(2, 5);
+        // [중요] 방 이름 앞에 고유 접두사를 붙여 이전 데이터와 섞이지 않게 함
+        room = gun.get('dalmuti_vFinal_' + rId);
         
-        // 내 정보 등록
-        room.get('players').get(myId).put({ name: myName, id: myId, lastSeen: Date.now() });
-        
+        room.get('players').get(myId).put({ name: myName, id: myId });
         showScreen('lobby-screen');
         
-        // 플레이어 리스트 실시간 업데이트
-        room.get('players').map().on((data) => {
-            updateLobby();
+        // 플레이어 리스트 실시간 감시 (중복 제거 로직 포함)
+        room.get('players').map().on((data, id) => {
+            if (data && data.name) {
+                playersInLobby[id] = data.name;
+                updateLobbyUI();
+            }
         });
 
-        // 게임 상태 동기화
         room.get('state').on(s => {
             if(!s) return;
             gameState = JSON.parse(s);
-            if(gameState.status === 'playing') { showScreen('game-screen'); renderGame(); }
-        });
-    }
-
-    function updateLobby() {
-        const lobby = document.getElementById('lobby-players');
-        lobby.innerHTML = "";
-        room.get('players').map().once(p => {
-            if(p && p.name) {
-                lobby.innerHTML += `<div>👤 ${p.name}님이 들어왔습니다.</div>`;
+            if(gameState.status === 'playing') { 
+                showScreen('game-screen'); 
+                renderGame(); 
             }
         });
     }
 
-    function hostStartGame() {
-        let pList = [];
-        room.get('players').once(data => {
-            Object.keys(data).forEach(k => {
-                if(data[k] && data[k].name) pList.push({id: data[k].id, name: data[k].name});
-            });
-            
-            if(pList.length < 2) return alert("최소 2명 이상 접속해야 합니다.");
-
-            let deck = [];
-            for (let i = 1; i <= 12; i++) for (let j = 0; j < i; j++) deck.push(i);
-            deck.push(13, 13); deck.sort(() => Math.random() - 0.5);
-
-            let hands = {}; pList.forEach(p => hands[p.id] = []);
-            let idx = 0; while(deck.length > 0) hands[pList[idx++ % pList.length].id].push(deck.pop());
-
-            const newState = { 
-                status: 'playing', players: pList, hands: hands, turnIdx: 0, 
-                lastPlayed: { rank: 14, count: 0, cards: [] }, passCount: 0, finishedIds: [] 
-            };
-            room.get('state').put(JSON.stringify(newState));
+    function updateLobbyUI() {
+        const lobby = document.getElementById('lobby-players');
+        lobby.innerHTML = "";
+        Object.values(playersInLobby).forEach(name => {
+            lobby.innerHTML += `<span class="player-tag">👤 ${name}</span>`;
         });
+    }
+
+    function hostStartGame() {
+        const pList = [];
+        Object.keys(playersInLobby).forEach(id => {
+            pList.push({ id: id, name: playersInLobby[id] });
+        });
+        
+        if(pList.length < 2) return alert("최소 2명 이상 접속해야 합니다.");
+
+        let deck = [];
+        for (let i = 1; i <= 12; i++) for (let j = 0; j < i; j++) deck.push(i);
+        deck.push(13, 13); deck.sort(() => Math.random() - 0.5);
+
+        let hands = {}; pList.forEach(p => hands[p.id] = []);
+        let idx = 0; while(deck.length > 0) hands[pList[idx++ % pList.length].id].push(deck.pop());
+
+        const newState = { 
+            status: 'playing', players: pList, hands: hands, turnIdx: 0, 
+            lastPlayed: { rank: 14, count: 0, cards: [] }, passCount: 0, finishedIds: [] 
+        };
+        room.get('state').put(JSON.stringify(newState));
     }
 
     function renderGame() {
         const turnPlayer = gameState.players[gameState.turnIdx];
-        document.getElementById('turn-info').innerText = `📢 [${turnPlayer.name}] 차례`;
+        document.getElementById('turn-info').innerText = turnPlayer.id === myId ? "⭐ 당신의 차례입니다!" : `📢 [${turnPlayer.name}] 차례입니다.`;
         
         const rb = document.getElementById('rank-board');
         rb.innerHTML = gameState.players.map((p, i) => `<span>[${i+1}등] ${p.name}</span>`).join(' ');
@@ -163,10 +163,10 @@
             gameState.lastPlayed = { rank, count: selectedCards.length, cards: selectedCards.map(c=>c.rank) };
             const toRem = selectedCards.map(c=>c.idx).sort((a,b)=>b-a);
             toRem.forEach(i => gameState.hands[myId].splice(i, 1));
-            if(gameState.hands[myId].length === 0) { gameState.finishedIds.push(myId); alert("탈출!"); }
+            if(gameState.hands[myId].length === 0) { gameState.finishedIds.push(myId); alert("탈출 성공!"); }
             gameState.passCount = 0;
             nextTurn();
-        } else { alert("낼 수 없습니다."); }
+        } else { alert("조건이 맞지 않습니다."); }
     }
 
     function passTurn() {
