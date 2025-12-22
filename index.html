@@ -3,91 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>달무티 - 서버 긴급 연결</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gun/0.2020.1239/gun.min.js"></script>
+    <title>달무티 - 다이렉트 연결</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root { --bg-color: #1a252f; --accent: #f1c40f; }
         body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg-color); color: white; margin: 0; padding: 10px; text-align: center; }
         .screen { background: rgba(0,0,0,0.5); padding: 20px; border-radius: 15px; max-width: 500px; margin: 10px auto; border: 1px solid #34495e; }
         button { padding: 12px 20px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; font-size: 16px; width: 85%; }
-        #status-bar { padding: 12px; margin-bottom: 15px; border-radius: 10px; font-size: 14px; background: #c0392b; font-weight: bold; transition: 0.3s; }
+        #status-bar { padding: 12px; margin-bottom: 15px; border-radius: 10px; font-size: 14px; background: #c0392b; font-weight: bold; }
         .online { background: #27ae60 !important; }
         .hidden { display: none; }
-        #debug-info { font-size: 10px; color: #666; margin-top: 20px; text-align: left; background: #000; padding: 5px; }
     </style>
 </head>
 <body>
-    <h2 style="color:var(--accent)">🏰 달무티</h2>
-    <div id="status-bar">📡 서버 신호 탐색 중...</div>
+    <h2 style="color:var(--accent)">🏰 달무티 (다이렉트)</h2>
+    <div id="status-bar">📡 신호기 켜는 중...</div>
 
     <div id="setup-screen" class="screen">
-        <div id="init-view">
-            <button onclick="initCreateRoom()">➕ 새 방 만들기</button>
-            <p style="font-size: 12px; color: #888; margin-top: 10px;">상태 바가 초록색이 되면 버튼을 누르세요.</p>
+        <div id="host-view">
+            <button onclick="createRoom()">➕ 방장으로 게임 시작</button>
         </div>
         <div id="join-view" class="hidden">
-            <input type="text" id="my-name" placeholder="닉네임 입력" autocomplete="off">
-            <button onclick="processJoin()">게임 입장</button>
+            <p style="color:var(--accent)">지연님이 보내준 링크로 접속하셨나요?</p>
+            <input type="text" id="my-name" placeholder="내 이름 입력" style="padding:10px; width:80%; margin-bottom:10px;">
+            <button onclick="joinRoom()">게임 입장</button>
         </div>
     </div>
 
-    <div id="debug-info" style="display:none;"></div>
+    <div id="lobby-screen" class="screen hidden">
+        <p>🔗 아래 주소를 복사해서 지연님께 보내세요!</p>
+        <div id="invite-url" style="background:#000; padding:10px; font-size:12px; word-break:break-all; margin-bottom:10px; cursor:pointer;" onclick="copyLink()"></div>
+        <div id="players"></div>
+    </div>
 
 <script>
     const sb = document.getElementById('status-bar');
-    const dbg = document.getElementById('debug-info');
+    let peer, conn, myId;
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetRoom = urlParams.get('room');
 
-    // [중요] 403/503 에러가 나지 않는 최신 안정 서버 리스트로 교체
-    const peers = [
-        'https://gun-us.herokuapp.com/gun',
-        'https://gun-eu.herokuapp.com/gun',
-        'https://gun-manhattan.herokuapp.com/gun',
-        'https://relay.peer.ooo/gun'
-    ];
+    // 1. 신호기(Peer) 초기화
+    peer = new Peer();
 
-    let gun;
-    try {
-        gun = Gun({ peers: peers, localStorage: false });
-        
-        // 연결 성공 감지 (하나의 서버라도 응답하면 초록색으로 변함)
-        gun.on('hi', (peer) => {
-            sb.innerText = "🟢 서버 연결 성공! 게임 가능";
-            sb.classList.add('online');
-            console.log("Connected to:", peer.url);
-        });
-
-    } catch (e) {
-        sb.innerText = "🚨 라이브러리 로딩 실패";
-        dbg.style.display = 'block';
-        dbg.innerText = e.message;
-    }
-
-    let currentRoomId = new URLSearchParams(window.location.search).get('room');
-    if(currentRoomId) {
-        document.getElementById('init-view').classList.add('hidden');
-        document.getElementById('join-view').classList.remove('hidden');
-    }
-
-    function initCreateRoom() {
-        if(!sb.classList.contains('online')) {
-            alert("서버와 연결 중입니다. 10초만 더 기다려보시고 안 되면 새로고침 해주세요.");
-            return;
+    peer.on('open', (id) => {
+        myId = id;
+        sb.innerText = "🟢 신호 준비 완료";
+        sb.classList.add('online');
+        if(targetRoom) {
+            document.getElementById('host-view').classList.add('hidden');
+            document.getElementById('join-view').classList.remove('hidden');
         }
-        currentRoomId = 'r' + Math.random().toString(36).substr(2, 5);
-        document.getElementById('init-view').classList.add('hidden');
-        document.getElementById('join-view').classList.remove('hidden');
+    });
+
+    // 2. 방 만들기 (Host)
+    function createRoom() {
+        const link = window.location.origin + window.location.pathname + "?room=" + myId;
+        document.getElementById('invite-url').innerText = link;
+        document.getElementById('setup-screen').classList.add('hidden');
+        document.getElementById('lobby-screen').classList.remove('hidden');
+        
+        peer.on('connection', (c) => {
+            conn = c;
+            conn.on('open', () => {
+                document.getElementById('players').innerHTML += "👤 지연님이 접속했습니다!<br>";
+                conn.send({type: 'welcome', msg: '안녕! 지연아!'});
+            });
+        });
     }
 
-    function processJoin() {
-        const name = document.getElementById('my-name').value.trim();
-        if(!name) return alert("닉네임을 입력하세요.");
-        
-        // 새 경로 v50 사용
-        const room = gun.get('dm_v50_' + currentRoomId);
-        const myId = 'u' + Math.random().toString(36).substr(2, 5);
-        room.get('players').get(myId).put({ name: name, id: myId });
-        
-        alert(name + "님, 대기실로 입장합니다! (이후 로직은 동일)");
+    // 3. 참여하기 (Guest)
+    function joinRoom() {
+        const name = document.getElementById('my-name').value;
+        conn = peer.connect(targetRoom);
+        conn.on('open', () => {
+            sb.innerText = "🟢 지연님과 연결 성공!";
+            document.getElementById('setup-screen').innerHTML = "<h3>🏰 연결 성공!</h3><p>아빠와 대화를 시작합니다.</p>";
+        });
+        conn.on('data', (data) => {
+            alert("아빠로부터 온 메시지: " + data.msg);
+        });
+    }
+
+    function copyLink() {
+        navigator.clipboard.writeText(document.getElementById('invite-url').innerText);
+        alert("링크 복사 완료!");
     }
 </script>
 </body>
