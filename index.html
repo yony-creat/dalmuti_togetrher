@@ -133,28 +133,39 @@
             case 'ROLE_PICKED': if(isHost) processRolePick(data.cardIdx, c.peer); break;
             case 'ROLE_OPEN':
                 renderOpenedRole(data.cardIdx, data.rank, data.pName);
-                roleDrawingIdx = data.nextIdx;
-                updateRoleTurnMsg();
+                roleDrawingIdx = data.nextIdx; updateRoleTurnMsg();
                 if(data.isAllDone && isHost) setTimeout(finalizeRoles, 1500);
                 break;
-            case 'TAX_START': players = data.players; startTaxPhase(); break;
+
+            // [이 부분을 수정/교체하세요]
+            case 'TAX_START': 
+                players = data.players; 
+                startTaxPhase(); 
+                updateStatusBar(); // 하단에 설명할 상태바 업데이트 함수 호출
+                break;
+
             case 'DALMUTI_WAIT':
                 taxStorage = data.taxCards;
-                if(players[0].id === myID) {
-                    document.getElementById('tax-instruction').innerHTML = "농노의 조공 도착!<br>하사할 <b>카드 2장</b>을 고르세요.";
+                const isDalmuti = (players[0].id === myID);
+                showScreen('tax-phase');
+                if(isDalmuti) {
+                    document.getElementById('tax-instruction').innerHTML = "농노의 조공이 도착했습니다.<br>이제 하사할 <b>카드 2장</b>을 고르세요.";
                     document.getElementById('tax-btn').classList.remove('hidden');
-                    renderHand('tax-hand', players[0].hand, true);
-                } else { document.getElementById('tax-instruction').innerText = "달무티가 고르는 중..."; }
+                    renderHand('tax-hand', players.find(p => p.id === myID).hand, true);
+                } else {
+                    document.getElementById('tax-instruction').innerText = "달무티가 하사품을 고르고 있습니다...";
+                    document.getElementById('tax-btn').classList.add('hidden');
+                }
                 break;
+
             case 'GAME_START':
                 players = data.players; currentPlayerIdx = data.turn; lastPlayed = data.last;
-                showScreen('game-board'); updateUI(); break;
+                showScreen('game-board'); updateUI(); updateStatusBar(); break;
             case 'PLAY_REQ': if(isHost) doPlay(data.rank, data.count, data.pIdx); break;
             case 'PASS_REQ': if(isHost) doPass(); break;
             case 'PEON_TAX': if(isHost) handlePeonTax(data.cards); break;
         }
     }
-
     function broadcast(data) { connections.forEach(c => c.send(data)); }
 
     function hostStartRoleDraw() {
@@ -239,20 +250,33 @@
         } else { handleDalTax(selectedCards); }
     }
 
-    function handlePeonTax(cards) {
-        const peon = players[players.length-1];
+  // [방장 전용] 농노의 조공을 처리하고 달무티에게 턴을 넘깁니다.
+    function handlePeonTax(selectedIndices) {
+        const peon = players[players.length - 1];
         taxStorage = [];
-        cards.sort((a,b)=>b.idx-a.idx).forEach(c => taxStorage.push(peon.hand.splice(c.idx,1)[0]));
-        const msg = {type:'DALMUTI_WAIT', taxCards: taxStorage}; handleData(msg); broadcast(msg);
+        
+        // 인덱스를 큰 순서대로 정렬하여 원본 배열 제거 시 인덱스 꼬임 방지
+        selectedIndices.sort((a, b) => b.idx - a.idx).forEach(c => {
+            taxStorage.push(peon.hand.splice(c.idx, 1)[0]);
+        });
+
+        // 중요: 방장 본인 화면을 업데이트하고, 모든 참여자에게도 '달무티 차례'임을 알립니다.
+        const msg = { type: 'DALMUTI_WAIT', taxCards: taxStorage };
+        handleData(msg); 
+        broadcast(msg); 
     }
 
-    function handleDalTax(cards) {
-        const dal = players[0]; const peon = players[players.length-1];
-        cards.sort((a,b)=>b.idx-a.idx).forEach(c => peon.hand.push(dal.hand.splice(c.idx,1)[0]));
-        dal.hand.push(...taxStorage);
-        players.forEach(p => p.hand.sort((a,b)=>a-b));
-        const msg = {type:'GAME_START', players, turn:0, last:{rank:14, count:0}};
-        handleData(msg); broadcast(msg);
+    // [표시 전용] 상단에 달무티와 농노 정보를 실시간으로 보여줍니다.
+    function updateStatusBar() {
+        if (players.length < 2) return;
+        const dalmuti = players[0];
+        const peon = players[players.length - 1];
+        const statusEl = document.getElementById('status-bar');
+        
+        statusEl.innerHTML = `
+            <span style="color:var(--accent)">👑 ${dalmuti.name}(${dalmuti.hand.length})</span> | 
+            <span style="color:#bdc3c7">💩 ${peon.name}(${peon.hand.length})</span>
+        `;
     }
 
     function updateUI() {
