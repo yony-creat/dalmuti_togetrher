@@ -5,85 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>달무티 멀티플레이</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <style>
+   <style>
         :root { --bg-color: #1a252f; --accent: #f1c40f; --card-bg: #ffffff; }
         body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg-color); color: white; margin: 0; padding: 10px; text-align: center; }
         #status-bar { padding: 10px; margin-bottom: 10px; border-radius: 8px; font-size: 14px; background: #c0392b; font-weight: bold; }
         .online { background: #27ae60 !important; }
         .screen { background: rgba(0,0,0,0.7); padding: 20px; border-radius: 15px; max-width: 500px; margin: 10px auto; border: 1px solid #34495e; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-    /* 1. 전체 여백 초기화 (공간 확보 핵심) */
-body { 
-    margin: 0; 
-    padding: 5px; /* 외부 여백을 최소화하여 카드 공간 확보 */
-    box-sizing: border-box;
-}
-
-/* 2. 컨테이너 내부 여백 제거 */
-#game-board, #tax-phase, #setup, #role-draw {
-    padding: 15px 5px !important; /* 좌우 여백을 줄임 */
-    max-width: 500px;
-    margin: 10px auto;
-}
-
-/* [공통] 카드 기본 디자인 */
-.card { 
-    background-color: #ffffff !important; 
-    border-radius: 6px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    box-sizing: border-box; 
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-.card-number { 
-    color: #2c3e50 !important; 
-    font-weight: bold; 
-    z-index: 10;
-    line-height: 1;
-    text-align: center;
-}
-
-/* 📱 모바일 설정 (화면 폭 600px 이하) - 5장 정렬 보장 */
-@media (max-width: 600px) {
-    #setup, #role-draw, #tax-phase, #game-board {
-        padding: 15px 5px !important;
-    }
-    .card-container { 
-        gap: 1.2vw !important; 
-        justify-content: flex-start; 
-        padding: 5px 2px;
-    }
-    .card { 
-        width: 18.2vw !important; 
-        /* 길쭉해지는 문제를 막기 위해 높이를 가로의 1.45배로 고정 */
-        height: calc(18.2vw * 1.45) !important; 
-        border: 1px solid #333 !important; 
-    }
-    .card-number { 
-        /* 숫자가 아주 잘 보이도록 크기 상향 조정 */
-        font-size: 9vw !important; 
-    }
-}
-
-/* 💻 PC 설정 (화면 폭 601px 이상) - 크기 고정 */
-@media (min-width: 601px) {
-    .card-container { 
-        gap: 10px; 
-        justify-content: center; 
-    }
-    .card { 
-        width: 80px !important; 
-        height: 116px !important; /* 가로 80px 기준 적정 높이 */
-        border: 1.5px solid #333 !important; 
-    }
-    .card-number { 
-        font-size: 36px !important; 
-    }
-}
+        .card-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 15px; min-height: 110px; }
+        .card { 
+            width: 65px; height: 95px; background: var(--card-bg); border-radius: 8px; 
+            border: 2px solid #333; cursor: pointer; display: flex; align-items: center; 
+            justify-content: center; color: #2c3e50; font-weight: bold; font-size: 28px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s;
+        }
         .card.selected { transform: translateY(-15px); border: 3px solid #e67e22; background: #fff9e6; }
         .card.disabled { opacity: 0.6; cursor: default; background: #bdc3c7; color: #7f8c8d; }
         #rank-board { background: rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 10px; margin-bottom: 15px; display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
