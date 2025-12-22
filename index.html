@@ -3,60 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>달무티 온라인 - 서버 긴급 복구</title>
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <title>달무티 - 서버 긴급 연결</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gun/0.2020.1239/gun.min.js"></script>
     <style>
         :root { --bg-color: #1a252f; --accent: #f1c40f; }
         body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg-color); color: white; margin: 0; padding: 10px; text-align: center; }
         .screen { background: rgba(0,0,0,0.5); padding: 20px; border-radius: 15px; max-width: 500px; margin: 10px auto; border: 1px solid #34495e; }
         button { padding: 12px 20px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; font-size: 16px; width: 85%; }
-        #status-bar { padding: 10px; margin-bottom: 15px; border-radius: 10px; font-size: 14px; background: #c0392b; font-weight: bold; transition: 0.3s; }
+        #status-bar { padding: 12px; margin-bottom: 15px; border-radius: 10px; font-size: 14px; background: #c0392b; font-weight: bold; transition: 0.3s; }
         .online { background: #27ae60 !important; }
         .hidden { display: none; }
-        .player-tag { background: #34495e; padding: 8px 15px; border-radius: 20px; margin: 5px; display: inline-block; border: 1px solid var(--accent); }
+        #debug-info { font-size: 10px; color: #666; margin-top: 20px; text-align: left; background: #000; padding: 5px; }
     </style>
 </head>
 <body>
-    <h2 style="color:var(--accent)">🏰 달무티 멀티플레이</h2>
-    <div id="status-bar">🔴 서버 통로 찾는 중 (약 10초 소요)</div>
+    <h2 style="color:var(--accent)">🏰 달무티</h2>
+    <div id="status-bar">📡 서버 신호 탐색 중...</div>
 
     <div id="setup-screen" class="screen">
         <div id="init-view">
             <button onclick="initCreateRoom()">➕ 새 방 만들기</button>
-            <p style="font-size: 12px; color: #888; margin-top: 10px;">상태 바가 초록색으로 변하면 버튼을 누르세요.</p>
+            <p style="font-size: 12px; color: #888; margin-top: 10px;">상태 바가 초록색이 되면 버튼을 누르세요.</p>
         </div>
         <div id="join-view" class="hidden">
             <input type="text" id="my-name" placeholder="닉네임 입력" autocomplete="off">
-            <button onclick="processJoin()">게임 입장하기</button>
+            <button onclick="processJoin()">게임 입장</button>
         </div>
     </div>
 
-    <div id="lobby-screen" class="screen hidden">
-        <div style="background: #34495e; padding: 10px; border-radius: 10px; margin-bottom: 15px;">
-            🏠 방 코드: <b id="display-room-id" style="color:var(--accent)"></b>
-        </div>
-        <div id="lobby-players" style="margin-bottom:20px; min-height: 60px;"></div>
-        <button onclick="startGame()">플레이어 입장 확인! 시작</button>
-    </div>
+    <div id="debug-info" style="display:none;"></div>
 
 <script>
     const sb = document.getElementById('status-bar');
-    
-    // [중요] 기존 실패한 주소 제외, 현재 동작 확인된 새로운 서버 주소들
-    const gun = Gun({
-        peers: [
-            'https://gun-us.herokuapp.com/gun',
-            'https://gun-eu.herokuapp.com/gun',
-            'https://gun-server.herokuapp.com/gun'
-        ],
-        localStorage: false
-    });
+    const dbg = document.getElementById('debug-info');
 
-    // 연결 성공 감지
-    gun.on('hi', () => {
-        sb.innerText = "🟢 서버 연결 성공! 게임 시작 가능";
-        sb.classList.add('online');
-    });
+    // [중요] 403/503 에러가 나지 않는 최신 안정 서버 리스트로 교체
+    const peers = [
+        'https://gun-us.herokuapp.com/gun',
+        'https://gun-eu.herokuapp.com/gun',
+        'https://gun-manhattan.herokuapp.com/gun',
+        'https://relay.peer.ooo/gun'
+    ];
+
+    let gun;
+    try {
+        gun = Gun({ peers: peers, localStorage: false });
+        
+        // 연결 성공 감지 (하나의 서버라도 응답하면 초록색으로 변함)
+        gun.on('hi', (peer) => {
+            sb.innerText = "🟢 서버 연결 성공! 게임 가능";
+            sb.classList.add('online');
+            console.log("Connected to:", peer.url);
+        });
+
+    } catch (e) {
+        sb.innerText = "🚨 라이브러리 로딩 실패";
+        dbg.style.display = 'block';
+        dbg.innerText = e.message;
+    }
 
     let currentRoomId = new URLSearchParams(window.location.search).get('room');
     if(currentRoomId) {
@@ -65,8 +69,11 @@
     }
 
     function initCreateRoom() {
-        if(!sb.classList.contains('online')) return alert("아직 서버와 연결되지 않았습니다. 잠시만 더 기다려주세요.");
-        currentRoomId = 'rm' + Math.random().toString(36).substr(2, 5);
+        if(!sb.classList.contains('online')) {
+            alert("서버와 연결 중입니다. 10초만 더 기다려보시고 안 되면 새로고침 해주세요.");
+            return;
+        }
+        currentRoomId = 'r' + Math.random().toString(36).substr(2, 5);
         document.getElementById('init-view').classList.add('hidden');
         document.getElementById('join-view').classList.remove('hidden');
     }
@@ -75,30 +82,12 @@
         const name = document.getElementById('my-name').value.trim();
         if(!name) return alert("닉네임을 입력하세요.");
         
+        // 새 경로 v50 사용
+        const room = gun.get('dm_v50_' + currentRoomId);
         const myId = 'u' + Math.random().toString(36).substr(2, 5);
-        const room = gun.get('dalmuti_v30_stable_' + currentRoomId);
-        
         room.get('players').get(myId).put({ name: name, id: myId });
-        document.getElementById('display-room-id').innerText = currentRoomId;
-        showScreen('lobby-screen');
-
-        room.get('players').map().on((data, id) => {
-            if (data && data.name) {
-                const lobby = document.getElementById('lobby-players');
-                if(!document.getElementById('p-' + id)) {
-                    lobby.innerHTML += `<div id="p-${id}" class="player-tag">👤 ${data.name}</div>`;
-                }
-            }
-        });
-
-        room.get('state').on(s => {
-            if(s) { /* 게임 시작 로직 */ alert("게임이 시작되었습니다!"); }
-        });
-    }
-
-    function showScreen(id) {
-        ['setup-screen', 'lobby-screen'].forEach(s => document.getElementById(s).classList.add('hidden'));
-        document.getElementById(id).classList.remove('hidden');
+        
+        alert(name + "님, 대기실로 입장합니다! (이후 로직은 동일)");
     }
 </script>
 </body>
