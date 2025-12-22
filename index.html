@@ -134,68 +134,87 @@
         c.on('data', data => handleData(data, c));
     }
 
-    function handleData(data, c) {
-        switch(data.type) {
-            case 'JOIN':
-                if(isHost) {
-                    players.push({id:c.peer, name:data.name, hand:[], isFinished:false});
-                    updateLobby(); broadcast({type:'LOBBY', players});
+function handleData(data, c) {
+    switch(data.type) {
+        case 'JOIN':
+            if(isHost) {
+                players.push({id:c.peer, name:data.name, hand:[], isFinished:false});
+                updateLobby(); 
+                broadcast({type:'LOBBY', players});
+            }
+            break;
+        case 'LOBBY': 
+            players = data.players; 
+            updateLobby(); 
+            showScreen('lobby'); 
+            break;
+        case 'START_DRAW_PHASE':
+            players = data.players; 
+            roleDrawingIdx = 0;
+            showRoleDrawScreen(players.length); 
+            updateRoleTurnMsg();
+            break;
+        case 'ROLE_PICKED': 
+            if(isHost) processRolePick(data.cardIdx, c.peer); 
+            break;
+        case 'ROLE_OPEN':
+            renderOpenedRole(data.cardIdx, data.rank, data.pName);
+            roleDrawingIdx = data.nextIdx; 
+            updateRoleTurnMsg();
+            if(data.isAllDone && isHost) setTimeout(finalizeRoles, 1500);
+            break;
+        case 'TAX_START': 
+            players = data.players; 
+            startTaxPhase(); 
+            updateStatusBar(); 
+            break;
+        case 'DALMUTI_WAIT':
+            taxStorage = data.taxCards;
+            const isDalmuti = (players[0].id === myID);
+            showScreen('tax-phase');
+            if(isDalmuti) {
+                document.getElementById('tax-instruction').innerHTML = "농노의 조공이 도착했습니다.<br>이제 하사할 <b>카드 2장</b>을 고르세요.";
+                document.getElementById('tax-btn').classList.remove('hidden');
+                renderHand('tax-hand', players.find(p => p.id === myID).hand, true);
+            } else {
+                document.getElementById('tax-instruction').innerText = "달무티가 하사품을 고르고 있습니다...";
+                document.getElementById('tax-btn').classList.add('hidden');
+            }
+            break;
+        case 'GAME_START':
+            players = data.players; 
+            currentPlayerIdx = data.turn; 
+            lastPlayed = data.last;
+            showScreen('game-board'); 
+            updateUI(); 
+            updateStatusBar(); 
+            break;
+        case 'SHOW_RESULT':
+            players = data.players;
+            showRoundResult(); 
+            break;
+        
+        // --- 🚩 핵심 수정 구간 🚩 ---
+        case 'PLAY_REQ': 
+            if(isHost) {
+                const actualIdx = players.findIndex(p => p.id === c.peer);
+                if (actualIdx !== -1) {
+                    doPlay(data.rank, data.count, actualIdx); 
                 }
-                break;
-            case 'LOBBY': players = data.players; updateLobby(); showScreen('lobby'); break;
-            case 'START_DRAW_PHASE':
-                players = data.players; roleDrawingIdx = 0;
-                showRoleDrawScreen(players.length); updateRoleTurnMsg();
-                break;
-            case 'ROLE_PICKED': if(isHost) processRolePick(data.cardIdx, c.peer); break;
-            case 'ROLE_OPEN':
-                renderOpenedRole(data.cardIdx, data.rank, data.pName);
-                roleDrawingIdx = data.nextIdx; updateRoleTurnMsg();
-                if(data.isAllDone && isHost) setTimeout(finalizeRoles, 1500);
-                break;
-
-            // [이 부분을 수정/교체하세요]
-            case 'TAX_START': 
-                players = data.players; 
-                startTaxPhase(); 
-                updateStatusBar(); // 하단에 설명할 상태바 업데이트 함수 호출
-                break;
-
-            case 'DALMUTI_WAIT':
-                taxStorage = data.taxCards;
-                const isDalmuti = (players[0].id === myID);
-                showScreen('tax-phase');
-                if(isDalmuti) {
-                    document.getElementById('tax-instruction').innerHTML = "농노의 조공이 도착했습니다.<br>이제 하사할 <b>카드 2장</b>을 고르세요.";
-                    document.getElementById('tax-btn').classList.remove('hidden');
-                    renderHand('tax-hand', players.find(p => p.id === myID).hand, true);
-                } else {
-                    document.getElementById('tax-instruction').innerText = "달무티가 하사품을 고르고 있습니다...";
-                    document.getElementById('tax-btn').classList.add('hidden');
-                }
-                break;
-
-case 'GAME_START':
-    // 방장이 보내준 최신 플레이어 목록(카드 수 포함)을 내 화면의 players 변수에 저장
-    players = data.players; 
-    currentPlayerIdx = data.turn; 
-    lastPlayed = data.last;
-
-    // 데이터를 갱신했으니 화면(UI)을 다시 그림
-    showScreen('game-board'); 
-    updateUI(); 
-    updateStatusBar(); 
-    
-    // 내 선택 목록도 비워줌 (카드가 제출되었으므로)
-    selectedCards = []; 
-    break;
-                
-            case 'PLAY_REQ': if(isHost) doPlay(data.rank, data.count, data.pIdx); break;
-            case 'PASS_REQ': if(isHost) doPass(); break;
-            case 'PEON_TAX': if(isHost) handlePeonTax(data.cards); break;
-            case 'DAL_TAX_REQ': if(isHost) handleDalTax(data.cards); break;
-        }
+            }
+            break;
+        case 'PASS_REQ': 
+            if(isHost) doPass(); 
+            break;
+        case 'PEON_TAX': 
+            if(isHost) handlePeonTax(data.cards); 
+            break;
+        case 'DAL_TAX_REQ': 
+            if(isHost) handleDalTax(data.cards); 
+            break;
+        // ---------------------------
     }
+}
     function broadcast(data) { connections.forEach(c => c.send(data)); }
 
     function hostStartRoleDraw() {
@@ -416,7 +435,7 @@ function playCards() {
     // 조커만 단독으로 낼 수 없음
     if (nonJokerCards.length === 0) {
         alert("조커는 단독으로 낼 수 없습니다!");
-        resetSelection(); // ★ 잘못 선택했을 때 리셋
+        resetSelection();
         return;
     }
 
@@ -424,10 +443,10 @@ function playCards() {
     const effectiveRank = nonJokerCards[0].rank;
     const totalCount = selectedCards.length; 
 
-    // 3. ★ 문제의 구간 ★ : 서로 다른 숫자가 섞여있는지 확인
+    // 3. 서로 다른 숫자가 섞여있는지 확인
     if (!nonJokerCards.every(c => c.rank === effectiveRank)) {
         alert("서로 다른 숫자의 카드는 함께 낼 수 없습니다! 선택이 초기화됩니다.");
-        resetSelection(); // ★ 11, 11, 10 처럼 잘못 고르면 싹 비워줌
+        resetSelection();
         return;
     }
 
@@ -435,12 +454,12 @@ function playCards() {
     if(lastPlayed.count > 0) {
         if(totalCount !== lastPlayed.count || effectiveRank >= lastPlayed.rank) {
             alert(`${lastPlayed.count}장으로 ${lastPlayed.rank}보다 낮은 숫자를 내야 합니다.`);
-            resetSelection(); // ★ 조건 안 맞을 때도 리셋
+            resetSelection();
             return;
         }
     }
 
-    // 5. 정상적인 경우 서버 전송
+    // 5. 서버 전송 및 로컬 선택 비우기
     const myIdx = players.findIndex(p => p.id === myID);
     if(isHost) {
         doPlay(effectiveRank, totalCount, myIdx);
@@ -451,10 +470,14 @@ function playCards() {
             count: totalCount, 
             pIdx: myIdx
         });
+        
+        // ★ 참가자도 전송 후 선택 목록을 즉시 비움
+        selectedCards = []; 
+        // 화면에 남은 주황색 테두리도 즉시 제거
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(c => c.classList.remove('selected'));
     }
 }
-
-// ✨ 선택을 강제로 비워주는 보조 함수
 function resetSelection() {
     selectedCards = []; // 데이터 비우기
     const cards = document.querySelectorAll('.card');
