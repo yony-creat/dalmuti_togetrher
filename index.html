@@ -11,15 +11,25 @@
         #status-bar { padding: 10px; margin-bottom: 10px; border-radius: 8px; font-size: 14px; background: #c0392b; font-weight: bold; }
         .online { background: #27ae60 !important; }
         .screen { background: rgba(0,0,0,0.7); padding: 20px; border-radius: 15px; max-width: 500px; margin: 10px auto; border: 1px solid #34495e; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        .card-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 15px; min-height: 110px; }
+        /* 카드들을 감싸는 컨테이너 여백 조정 */
+        .card-container { 
+            display: flex; 
+            flex-wrap: wrap; 
+            justify-content: flex-start; /* 왼쪽부터 차곡차곡 쌓이게 변경 */
+            gap: 1.5vw; /* 카드 사이 간격을 화면 너비의 1.5%로 고정 */
+            margin-top: 15px; 
+            padding: 5px;
+        }
+
         .card { 
-            /* 화면 너비에 맞춰 5장이 들어가도록 너비를 18% 정도로 설정합니다. */
-            width: 18vw; 
-            /* 너비에 비례해서 높이도 적절히 조절합니다 (기존 70px -> 25vw 가량) */
+            /* 한 줄에 5장 + 간격 4개를 계산한 너비입니다.
+               (100% - (간격 1.5% * 4)) / 5 = 약 18.8% 
+            */
+            width: 18.2vw; 
             height: 26vw; 
             background: white; 
-            border: 2px solid #333; 
-            border-radius: 8px; 
+            border: 1.5px solid #333; /* 테두리 두께도 살짝 줄임 */
+            border-radius: 6px; 
             cursor: pointer; 
             display: flex; 
             align-items: center; 
@@ -27,13 +37,13 @@
             color: #2c3e50;
             font-weight: bold;
             position: relative;
-            overflow: hidden;
+            box-sizing: border-box; /* 패딩과 테두리가 너비에 포함되도록 설정 */
         }
 
-        /* 글자 크기도 카드 크기에 맞춰 조금 줄여주면 더 예쁩니다. */
+        /* 숫자 크기를 카드에 꽉 차게 조절 */
         .card-number { 
-            font-size: 5.5vw; 
-            z-index: 1; 
+            font-size: 6vw; 
+            line-height: 1;
         }
         .card.selected { transform: translateY(-15px); border: 3px solid #e67e22; background: #fff9e6; }
         .card.disabled { opacity: 0.6; cursor: default; background: #bdc3c7; color: #7f8c8d; }
