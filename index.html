@@ -175,14 +175,20 @@
                 }
                 break;
 
-            case 'GAME_START':
-                players = data.players; currentPlayerIdx = data.turn; lastPlayed = data.last;
-                showScreen('game-board'); updateUI(); updateStatusBar(); break;
+case 'GAME_START':
+    // 방장이 보내준 최신 플레이어 목록(카드 수 포함)을 내 화면의 players 변수에 저장
+    players = data.players; 
+    currentPlayerIdx = data.turn; 
+    lastPlayed = data.last;
 
-                case 'SHOW_RESULT':
-                players = data.players;
-                showRoundResult(); // 제가 이전에 드린 결과 창 띄우는 함수 호출
-                break;
+    // 데이터를 갱신했으니 화면(UI)을 다시 그림
+    showScreen('game-board'); 
+    updateUI(); 
+    updateStatusBar(); 
+    
+    // 내 선택 목록도 비워줌 (카드가 제출되었으므로)
+    selectedCards = []; 
+    break;
                 
             case 'PLAY_REQ': if(isHost) doPlay(data.rank, data.count, data.pIdx); break;
             case 'PASS_REQ': if(isHost) doPass(); break;
