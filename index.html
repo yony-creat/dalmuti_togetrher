@@ -27,7 +27,10 @@
         input { padding: 12px; width: 80%; border-radius: 5px; border: 2px solid #34495e; font-size: 16px; margin-bottom: 10px; text-align: center; }
         .turn-msg { font-size: 1.1rem; color: var(--accent); font-weight: bold; margin: 10px 0; }
         .role-item { margin: 8px 0; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.1); text-align: left; border-left: 4px solid var(--accent); }
-    </style>
+   .badge-dalmuti { background: #f1c40f !important; color: #000; } /* 황금색 */
+    .badge-peon { background: #95a5a6 !important; } /* 회색 */
+    .badge-common { background: #34495e !important; } 
+   </style>
 </head>
 <body>
     <div id="status-bar">서버 연결 중...</div>
@@ -72,6 +75,12 @@
             <button onclick="playCards()">카드 내기</button>
             <button onclick="passTurn()" style="background:#7f8c8d;">통과 (Pass)</button>
         </div>
+<div id="round-result-screen" class="screen hidden">
+        <h2 style="color:var(--accent)">🏆 라운드 종료 🏆</h2>
+        <div id="final-ranking-list" style="margin: 20px 0;"></div>
+        <button onclick="finalizeRoles()" style="background:#2ecc71;">이 서열로 다음 판 시작</button>
+        <button onclick="location.reload()" style="background:#e74c3c;">완전 새로 시작(방 폭파)</button>
+    </div>
     </div>
 
 <script>
@@ -79,6 +88,7 @@
     let isHost = false, myID = "", myName = "";
     let players = [], currentPlayerIdx = 0, lastPlayed = {rank:14, count:0}, selectedCards = [], passCount = 0;
     let taxStorage = [], roleDrawingIdx = 0, roleDeck = [];
+    let finishOrder = [];
 
     window.onload = () => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -91,6 +101,13 @@
         navigator.clipboard.writeText(link).then(() => alert("링크가 복사되었습니다!"));
     }
 
+    function updateLobby() {
+        const list = document.getElementById('player-list-lobby');
+        list.innerHTML = players.map(p => `<div>👤 ${p.name} ${p.id === myID ? '(나)' : ''}</div>`).join('');
+        if(isHost && players.length >= 2) {
+            document.getElementById('start-btn').classList.remove('hidden');
+        }
+    }
     function initPeer(host) {
         myName = document.getElementById('my-name').value.trim();
         if (!myName) return alert("이름을 입력하세요!");
@@ -161,6 +178,12 @@
             case 'GAME_START':
                 players = data.players; currentPlayerIdx = data.turn; lastPlayed = data.last;
                 showScreen('game-board'); updateUI(); updateStatusBar(); break;
+
+                case 'SHOW_RESULT':
+                players = data.players;
+                showRoundResult(); // 제가 이전에 드린 결과 창 띄우는 함수 호출
+                break;
+                
             case 'PLAY_REQ': if(isHost) doPlay(data.rank, data.count, data.pIdx); break;
             case 'PASS_REQ': if(isHost) doPass(); break;
             case 'PEON_TAX': if(isHost) handlePeonTax(data.cards); break;
@@ -214,12 +237,20 @@
         document.getElementById('role-turn-msg').innerText = (p.id === myID) ? "🔴 당신의 차례! 카드를 뽑으세요." : `⌛ ${p.name}님이 뽑는 중...`;
     }
 
-    function finalizeRoles() {
-        players.sort((a,b) => a.initRank - b.initRank);
-        players.forEach((p,i) => p.role = i===0?"👑 달무티":(i===players.length-1?"💩 농노":`${i+1}등 평민`));
+   function finalizeRoles() {
+        // 이미 게임을 한 번 해서 서열이 정해진 상태라면 정렬을 생략하고 바로 카드 분배
+        // (nextTurn에서 이미 players 배열이 순위대로 정렬되었기 때문)
+        if (!players[0].role) {
+            players.sort((a,b) => a.initRank - b.initRank);
+        }
+        
+        players.forEach((p,i) => {
+            p.isFinished = false; // 상태 초기화
+            p.role = i===0?"👑 달무티":(i===players.length-1?"💩 농노":`${i+1}등 평민`);
+        });
+        
         dealCards();
     }
-
     function dealCards() {
         let deck = []; for(let i=1; i<=12; i++) for(let j=0; j<i; j++) deck.push(i);
         deck.push(13,13); deck.sort(()=>Math.random()-0.5);
@@ -378,11 +409,23 @@ function submitTax() {
         else conn.send({type:'PLAY_REQ', rank, count:selectedCards.length, pIdx: players.findIndex(p=>p.id===myID)});
     }
 
-    function doPlay(rank, count, pIdx) {
+function doPlay(rank, count, pIdx) {
         lastPlayed = {rank, count};
-        for(let i=0; i<count; i++) players[pIdx].hand.splice(players[pIdx].hand.indexOf(rank), 1);
-        if(!players[pIdx].hand.length) players[pIdx].isFinished = true;
-        passCount = 0; nextTurn();
+        // 카드 제거
+        for(let i=0; i<count; i++) {
+            const index = players[pIdx].hand.indexOf(rank);
+            if (index > -1) players[pIdx].hand.splice(index, 1);
+        }
+        
+        // 탈출 처리
+        if(players[pIdx].hand.length === 0 && !players[pIdx].isFinished) {
+            players[pIdx].isFinished = true;
+            finishOrder.push(players[pIdx]); // 탈출 명단에 추가
+            alert(`🎊 ${players[pIdx].name}님 ${finishOrder.length}등으로 탈출! 🎊`);
+        }
+        
+        passCount = 0; 
+        nextTurn();
     }
 
     function passTurn() { if(isHost) doPass(); else conn.send({type:'PASS_REQ'}); }
@@ -400,15 +443,58 @@ function submitTax() {
         
         nextTurn(); 
     }
+
     function nextTurn() {
-        do { currentPlayerIdx = (currentPlayerIdx + 1) % players.length; } while(players[currentPlayerIdx].isFinished);
-        const msg = {type:'GAME_START', players, turn:currentPlayerIdx, last:lastPlayed}; handleData(msg); broadcast(msg);
+        const activePlayers = players.filter(p => !p.isFinished);
+        
+        if (activePlayers.length <= 1) {
+            if (activePlayers.length === 1) {
+                activePlayers[0].isFinished = true;
+                finishOrder.push(activePlayers[0]);
+            }
+
+            // 탈출 순서대로 플레이어 재배치 및 신분 부여
+            players = [...finishOrder]; 
+            players.forEach((p, i) => {
+                if (i === 0) p.role = "👑 달무티";
+                else if (i === players.length - 1) p.role = "💩 농노";
+                else p.role = `${i+1}등 평민`;
+            });
+
+            const msg = { type: 'SHOW_RESULT', players: players };
+            finishOrder = []; // 다음 판을 위해 초기화
+            handleData(msg);
+            broadcast(msg);
+            return;
+        }
+
+        do { 
+            currentPlayerIdx = (currentPlayerIdx + 1) % players.length; 
+        } while(players[currentPlayerIdx].isFinished);
+
+        const msg = {type:'GAME_START', players, turn:currentPlayerIdx, last:lastPlayed}; 
+        handleData(msg); 
+        broadcast(msg);
+    }
+    // 결과 화면을 실제로 그려주는 함수
+    function showRoundResult() {
+        showScreen('round-result-screen');
+        const listDiv = document.getElementById('final-ranking-list');
+        listDiv.innerHTML = players.map((p, i) => {
+            let cls = (i === 0) ? 'badge-dalmuti' : (i === players.length - 1 ? 'badge-peon' : 'badge-common');
+            return `
+                <div class="role-item">
+                    <span class="rank-badge ${cls}">${i + 1}위</span>: 
+                    <b>${p.name}</b> <span style="font-size:0.8rem; color:#aaa;">(${p.role})</span>
+                </div>
+            `;
+        }).join('');
     }
 
-    function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
-    function updateLobby() { 
-        document.getElementById('player-list-lobby').innerHTML = players.map(p => `<div class="role-item">👤 ${p.name} 접속 중</div>`).join('');
-        if(isHost && players.length >= 2) document.getElementById('start-btn').classList.remove('hidden');
+    // 화면 전환 함수 (기존 코드에 없을 경우 대비)
+    function showScreen(id) { 
+        document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden')); 
+        document.getElementById(id).classList.remove('hidden'); 
     }
 </script>
 </body>
