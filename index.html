@@ -25,6 +25,7 @@
         #status-bar { padding: 10px; margin-bottom: 10px; border-radius: 8px; font-size: 14px; background: #c0392b; font-weight: bold; }
         .online { background: #27ae60 !important; }
         .player-badge { display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.1); padding: 8px; margin: 5px 0; border-radius: 10px; border: 1px solid #555; }
+        .rank-item { margin: 10px 0; font-size: 1.1rem; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.1); }
     </style>
 </head>
 <body>
@@ -42,7 +43,7 @@
 
     <div id="lobby-screen" class="screen hidden">
         <div id="invite-box" class="hidden">
-            <p style="font-size:12px; color:var(--accent);">🔗 아래 링크를 <b>팀원들에게</b> 보내세요!</p>
+            <p style="font-size:12px; color:var(--accent);">🔗 아래 링크를 <b>팀원들에게</b> 공유하세요!</p>
             <div id="room-url" style="background:#000; padding:8px; font-size:10px; word-break:break-all; cursor:pointer;" onclick="copyLink()"></div>
         </div>
         <h3>👥 대기실</h3>
@@ -55,11 +56,11 @@
         <p>카드를 한 장 골라주세요! 숫자가 작을수록 높은 신분이 됩니다.</p>
         <div id="role-cards" class="card-container"></div>
         <div id="role-results" style="margin-top:20px; font-weight:bold;"></div>
-        <button id="tax-start-btn" class="hidden" onclick="hostStartTaxPhase()">💰 세금 단계로 이동</button>
+        <button id="tax-start-btn" class="hidden" onclick="hostStartGamePhase()">💰 게임 시작 (카드 나누기)</button>
     </div>
 
     <div id="game-screen" class="screen hidden">
-        <div id="rank-display" style="margin-bottom:15px;"></div>
+        <div id="rank-display" style="margin-bottom:15px; font-size: 0.8rem;"></div>
         <div id="turn-info" style="color:var(--accent); font-weight:bold; margin-bottom:10px; font-size:1.1rem;"></div>
         <div id="table" class="card-container" style="background:rgba(255,255,255,0.05); border-radius:10px; padding:10px;"></div>
         <div id="hand" class="card-container"></div>
@@ -73,7 +74,7 @@
         <h3>🏆 라운드 결과</h3>
         <div id="final-ranking"></div>
         <div style="margin-top:20px;">
-            <button id="continue-btn" class="hidden" onclick="hostStartTaxPhase()" style="background:#2ecc71;">이 결과로 다음 판 진행</button>
+            <button id="continue-btn" class="hidden" onclick="hostStartGamePhase()" style="background:#2ecc71;">이 결과로 다음 판 진행</button>
             <button onclick="location.reload()" style="background:#e74c3c;">처음부터 다시 하기 (새로고침)</button>
         </div>
     </div>
@@ -86,7 +87,7 @@
     const roomCode = new URLSearchParams(window.location.search).get('room');
 
     peer.on('open', (id) => {
-        myId = id; document.getElementById('status-bar').innerText = "🟢 신호 준비 완료";
+        myId = id; document.getElementById('status-bar').innerText = "🟢 접속 준비 완료";
         document.getElementById('status-bar').classList.add('online');
         if(roomCode) {
             hostPeerId = roomCode;
@@ -95,7 +96,6 @@
         }
     });
 
-    // --- 방장 및 위임 로직 ---
     function beHost() {
         myRole = 'host'; hostPeerId = myId;
         const name = prompt("사용할 이름을 입력하세요", "방장");
@@ -108,17 +108,6 @@
         });
     }
 
-    function delegateHost(targetId) {
-        if(!confirm("해당 팀원에게 방장 권한을 위임하시겠습니까?")) return;
-        const targetConn = connMap[targetId];
-        if(targetConn) {
-            targetConn.send({type: 'BECOME_HOST', state: gameState});
-            myRole = 'guest'; hostPeerId = targetId;
-            updatePlayerList();
-        }
-    }
-
-    // --- 참가자 로직 ---
     function beGuest() {
         myRole = 'guest'; const name = document.getElementById('join-name').value;
         const conn = peer.connect(hostPeerId);
@@ -128,6 +117,16 @@
             conn.on('data', (data) => handleData(data, conn));
         });
         connMap[hostPeerId] = conn;
+    }
+
+    function delegateHost(targetId) {
+        if(!confirm("해당 팀원에게 방장 권한을 위임하시겠습니까?")) return;
+        const targetConn = connMap[targetId];
+        if(targetConn) {
+            targetConn.send({type: 'BECOME_HOST', state: gameState});
+            myRole = 'guest'; hostPeerId = targetId;
+            updatePlayerList();
+        }
     }
 
     function handleData(data, conn) {
@@ -146,8 +145,7 @@
             if(gameState.status === 'lobby') document.getElementById('draw-start-btn').classList.remove('hidden');
         }
         if(data.type === 'SYNC') { 
-            gameState = data.state; 
-            if(data.hand) myHand = data.hand;
+            gameState = data.state; if(data.hand) myHand = data.hand;
             refreshUI(); 
         }
         if(data.type === 'PICK_RES') {
@@ -162,7 +160,6 @@
         }
     }
 
-    // --- UI 및 게임 로직 ---
     function updatePlayerList() {
         const list = document.getElementById('player-list'); list.innerHTML = "";
         gameState.players.forEach(p => {
@@ -187,29 +184,28 @@
             const container = document.getElementById('role-cards'); container.innerHTML = "";
             for(let i=0; i<5; i++) container.innerHTML += `<div class="card" onclick="pickRoleCard(this)"><div class="card-number">?</div></div>`;
         }
-        if(gameState.status === 'playing') {
-            showScreen('game-screen');
-            renderGame();
-        }
+        if(gameState.status === 'playing') { showScreen('game-screen'); renderGame(); }
         if(gameState.status === 'result') {
             showScreen('result-screen');
-            document.getElementById('final-ranking').innerHTML = gameState.players.map((p, i) => `<div><b>${i+1}위</b>: ${p.name} (${p.roleTitle})</div>`).join('');
+            document.getElementById('final-ranking').innerHTML = gameState.players.map((p, i) => `<div class="rank-item"><b>${i+1}위</b>: ${p.name} (${p.roleTitle})</div>`).join('');
             if(myRole === 'host') document.getElementById('continue-btn').classList.remove('hidden');
         }
     }
 
     function pickRoleCard(el) {
+        if(el.classList.contains('selected')) return;
         const val = Math.floor(Math.random() * 12) + 1;
         el.innerHTML = `<div class="card-number">${val}</div><img src="${IMG_BASE}${val}.png" onerror="this.style.display='none'">`;
+        el.classList.add('selected');
         if(myRole === 'host') { gameState.players.find(p => p.id === myId).rankVal = val; checkAllPicks(); }
-        else { connMap[hostPeerId].send({type: 'PICK_RES', val, uid: myId}); }
+        else { const c = connMap[hostPeerId]; if(c) c.send({type: 'PICK_RES', val, uid: myId}); }
     }
 
     function checkAllPicks() {
         if(gameState.players.every(p => p.rankVal > 0)) {
             gameState.players.sort((a,b) => a.rankVal - b.rankVal);
             assignRoles();
-            document.getElementById('role-results').innerHTML = "서열 확정! 잠시 후 세금 단계로 이동합니다.";
+            document.getElementById('role-results').innerHTML = "서열 확정! 게임을 시작하세요.";
             document.getElementById('tax-start-btn').classList.remove('hidden');
             broadcast({type: 'SYNC', state: gameState});
         }
@@ -224,10 +220,11 @@
         });
     }
 
-    function hostStartTaxPhase() {
+    function hostStartGamePhase() {
         let deck = []; for(let i=1; i<=12; i++) for(let j=0; j<i; j++) deck.push(i);
         deck.push(13, 13); deck.sort(() => Math.random() - 0.5);
         gameState.status = 'playing'; gameState.turnIdx = 0; gameState.finishOrder = [];
+        gameState.lastPlayed = {rank:14, count:0};
         gameState.players.forEach((p, idx) => {
             let hand = []; for(let i=idx; i<deck.length; i+=gameState.players.length) hand.push(deck[i]);
             if(p.id === myId) myHand = hand;
@@ -241,7 +238,7 @@
         const p = gameState.players[gameState.turnIdx];
         document.getElementById('turn-info').innerText = p.id === myId ? "⭐ 내 차례!" : `📢 [${p.name}] 차례`;
         document.getElementById('game-controls').classList.toggle('hidden', p.id !== myId);
-        document.getElementById('rank-display').innerHTML = gameState.players.map(x => `<span style="font-size:12px; border:1px solid #555; padding:3px; margin:2px;">${x.roleTitle}:${x.name}</span>`).join(' ');
+        document.getElementById('rank-display').innerHTML = gameState.players.map(x => `<span>${x.roleTitle}:${x.name}</span>`).join(' | ');
         
         const table = document.getElementById('table'); table.innerHTML = "";
         for(let i=0; i<gameState.lastPlayed.count; i++) table.innerHTML += `<div class="card"><img src="${IMG_BASE}${gameState.lastPlayed.rank}.png"></div>`;
@@ -250,39 +247,50 @@
         myHand.sort((a,b)=>a-b).forEach((r, i) => {
             const c = document.createElement('div'); c.className = 'card';
             c.innerHTML = `<img src="${IMG_BASE}${r}.png">`;
-            c.onclick = () => { c.classList.toggle('selected'); const sIdx = selected.findIndex(s => s.i === i); if(sIdx>-1) selected.splice(sIdx,1); else selected.push({r, i}); };
+            c.onclick = () => {
+                c.classList.toggle('selected');
+                const sIdx = selected.findIndex(s => s.i === i);
+                if(sIdx > -1) selected.splice(sIdx, 1); else selected.push({r, i});
+            };
             handDiv.appendChild(c);
         });
         selected = [];
     }
 
     function playSelectedCards() {
+        if(selected.length === 0) return;
         const rank = selected[0].r;
         if(gameState.lastPlayed.count === 0 || (selected.length === gameState.lastPlayed.count && rank < gameState.lastPlayed.rank)) {
             gameState.lastPlayed = {rank, count: selected.length};
             selected.sort((a,b)=>b.i-a.i).forEach(s => myHand.splice(s.i, 1));
-            if(myHand.length === 0) broadcast({type: 'FINISH_NOTI', uid: myId});
+            if(myHand.length === 0) {
+                if(myRole === 'host') {
+                    gameState.players.find(x => x.id === myId).isFinished = true;
+                    if(!gameState.finishOrder.includes(myId)) gameState.finishOrder.push(myId);
+                    checkRoundEnd();
+                } else { connMap[hostPeerId].send({type: 'FINISH_NOTI', uid: myId}); }
+            }
             nextTurn();
-        }
+        } else { alert("낼 수 없는 카드입니다."); }
     }
 
     function nextTurn() {
         do { gameState.turnIdx = (gameState.turnIdx + 1) % gameState.players.length; } while(gameState.players[gameState.turnIdx].isFinished);
-        broadcast({type: 'SYNC', state: gameState}); refreshUI();
+        if(myRole === 'host') broadcast({type: 'SYNC', state: gameState});
+        else connMap[hostPeerId].send({type: 'SYNC_REQ', state: gameState});
+        refreshUI();
     }
 
     function passTurn() { nextTurn(); }
 
     function checkRoundEnd() {
         if(gameState.players.filter(p => !p.isFinished).length <= 1) {
-            gameState.status = 'result';
-            // 순서대로 서열 재배정
             let lastId = gameState.players.find(p => !p.isFinished)?.id;
             if(lastId && !gameState.finishOrder.includes(lastId)) gameState.finishOrder.push(lastId);
-            
             let newPlayers = [];
             gameState.finishOrder.forEach(id => newPlayers.push(gameState.players.find(x => x.id === id)));
             gameState.players = newPlayers; assignRoles();
+            gameState.status = 'result';
             broadcast({type: 'SYNC', state: gameState});
             refreshUI();
         }
@@ -293,7 +301,7 @@
         ['setup-screen', 'lobby-screen', 'role-draw-screen', 'game-screen', 'result-screen'].forEach(s => document.getElementById(s).classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
     }
-    function copyLink() { navigator.clipboard.writeText(document.getElementById('room-url').innerText); alert("링크가 복사되었습니다!"); }
+    function copyLink() { navigator.clipboard.writeText(document.getElementById('room-url').innerText); alert("링크 복사 완료!"); }
 </script>
 </body>
 </html>
