@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>달무티 - 함께하기</title>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <style>
+        :root { --bg-color: #1a252f; --accent: #f1c40f; }
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: var(--bg-color); color: white; margin: 0; padding: 10px; text-align: center; }
+        .screen { background: rgba(0,0,0,0.5); padding: 20px; border-radius: 15px; max-width: 500px; margin: 10px auto; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .card-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 15px 0; }
+        .card { 
+            width: 65px; height: 95px; background: white; border-radius: 8px; 
+            border: 2px solid #333; cursor: pointer; overflow: hidden; position: relative;
+            display: flex; align-items: center; justify-content: center; color: #2c3e50;
+        }
+        .card-number { font-size: 28px; font-weight: bold; position: absolute; z-index: 1; }
+        .card img { width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 2; }
+        .card.selected { transform: translateY(-15px); border-color: var(--accent); box-shadow: 0 0 15px var(--accent); z-index: 10; }
+        button { padding: 12px 20px; border-radius: 8px; border: none; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin: 5px; font-size: 16px; }
+        .hidden { display: none; }
+        input { padding: 12px; width: 85%; border-radius: 5px; border: none; font-size: 16px; margin-bottom: 10px; text-align: center; }
+        #rank-board { background: rgba(255,255,255,0.1); padding: 10px; border-radius: 10px; margin-bottom: 10px; font-size: 0.9rem; border: 1px solid var(--accent); }
+    </style>
+</head>
+<body>
+    <h2 style="color:var(--accent)">🏰 달무티 (멀티 모드)</h2>
+
+    <div id="setup-screen" class="screen">
+        <input type="text" id="room-id" placeholder="방 이름 (모두 똑같이 입력)">
+        <input type="text" id="my-name" placeholder="내 이름">
+        <button onclick="joinGame()">접속하기</button>
+    </div>
+
+    <div id="lobby-screen" class="screen hidden">
+        <h3>대기실</h3>
+        <p>함께할 사람들이 모두 들어오면 시작하세요.</p>
+        <div id="lobby-players" style="margin-bottom:20px;"></div>
+        <button id="start-btn" onclick="hostStartGame()">모두 준비됨! 시작</button>
+    </div>
+
+    <div id="game-screen" class="screen hidden">
+        <div id="rank-board"></div>
+        <div id="turn-info" style="color:#3498db; font-weight:bold; margin-bottom:10px;">차례 대기 중...</div>
+        <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:10px; min-height:110px;">
+            <div id="table-cards" class="card-container"></div>
+        </div>
+        <div id="my-hand" class="card-container"></div>
+        <div id="game-controls">
+            <button onclick="playCards()">카드 내기</button>
+            <button onclick="passTurn()" style="background:#7f8c8d;">통과 (Pass)</button>
+        </div>
+    </div>
+
+<script>
+    const gun = Gun(['https://gun-manhattan.herokuapp.com/gun']); // 공용 서버 사용
+    const IMG_BASE = "https://raw.githubusercontent.com/hmkim199/java-dalmuti/master/src/dalmuti/img/";
+    
+    let room, myName, myId, gameState = {};
+    let selectedCards = [];
+
+    function joinGame() {
+        const rId = document.getElementById('room-id').value.trim();
+        myName = document.getElementById('my-name').value.trim();
+        if(!rId || !myName) return alert("방 이름과 내 이름을 적어주세요.");
+        
+        myId = Math.random().toString(36).substr(2, 9);
+        room = gun.get('dalmuti_room_' + rId);
+        
+        // 내 정보 등록
+        room.get('players').get(myId).put({ name: myName, id: myId, isReady: true });
+        
+        showScreen('lobby-screen');
+        listenToRoom();
+    }
+
+    function listenToRoom() {
+        // 플레이어 목록 감시
+        room.get('players').map().on((data) => {
+            if(data) updateLobbyUI();
+        });
+
+        // 게임 상태 감시
+        room.get('state').on((state) => {
+            if(!state) return;
+            gameState = JSON.parse(state);
+            if(gameState.status === 'playing') {
+                showScreen('game-screen');
+                renderGame();
+            }
+        });
+    }
+
+    function updateLobbyUI() {
+        const lobby = document.getElementById('lobby-players');
+        lobby.innerHTML = "";
+        room.get('players').map().once((p) => {
+            if(p) lobby.innerHTML += `<div>👤 ${p.name} 접속 완료</div>`;
+        });
+    }
+
+    function hostStartGame() {
+        // 호스트(먼저 누른 사람)가 카드 분배 및 상태 초기화
+        let playerList = [];
+        room.get('players').once((data) => {
+            Object.keys(data).forEach(k => { if(data[k] && data[k].name) playerList.push(data[k]); });
+            
+            let deck = [];
+            for (let i = 1; i <= 12; i++) for (let j = 0; j < i; j++) deck.push(i);
+            deck.push(13, 13);
+            deck.sort(() => Math.random() - 0.5);
+
+            let hands = {};
+            playerList.forEach(p => hands[p.id] = []);
+            let idx = 0;
+            while(deck.length > 0) hands[playerList[idx++ % playerList.length].id].push(deck.pop());
+
+            const initialState = {
+                status: 'playing',
+                players: playerList,
+                hands: hands,
+                turnIdx: 0,
+                lastPlayed: { rank: 14, count: 0, cards: [] },
+                passCount: 0,
+                finished: []
+            };
+            room.get('state').put(JSON.stringify(initialState));
+        });
+    }
+
+    function renderGame() {
+        const me = gameState.players[gameState.turnIdx];
+        document.getElementById('turn-info').innerText = `📢 [${me.name}] 님의 차례`;
+        
+        // 내 패 그리기
+        const handDiv = document.getElementById('my-hand');
+        handDiv.innerHTML = "";
+        const myHand = gameState.hands[myId] || [];
+        myHand.sort((a,b)=>a-b).forEach((rank, idx) => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `<div class="card-number">${rank === 13 ? 'J' : rank}</div><img src="${IMG_BASE}${rank}.png" onerror="this.style.display='none'">`;
+            card.onclick = () => {
+                card.classList.toggle('selected');
+                const fIdx = selectedCards.findIndex(c => c.idx === idx);
+                if (fIdx > -1) selectedCards.splice(fIdx, 1); else selectedCards.push({ rank, idx });
+            };
+            handDiv.appendChild(card);
+        });
+
+        // 바닥 카드 그리기
+        const tableDiv = document.getElementById('table-cards');
+        tableDiv.innerHTML = "";
+        gameState.lastPlayed.cards.forEach(rank => {
+            tableDiv.innerHTML += `<div class="card"><div class="card-number">${rank === 13 ? 'J' : rank}</div><img src="${IMG_BASE}${rank}.png" onerror="this.style.display='none'"></div>`;
+        });
+
+        // 버튼 활성화 여부
+        const isMyTurn = (me.id === myId);
+        document.getElementById('game-controls').classList.toggle('hidden', !isMyTurn);
+    }
+
+    function playCards() {
+        if(selectedCards.length === 0) return;
+        const rank = selectedCards[0].rank;
+        if(!selectedCards.every(c => c.rank === rank || c.rank === 13)) return alert("같은 카드만 가능!");
+        
+        const count = selectedCards.length;
+        if(gameState.lastPlayed.count === 0 || (count === gameState.lastPlayed.count && rank < gameState.lastPlayed.rank)) {
+            // 상태 업데이트
+            gameState.lastPlayed = { rank, count, cards: selectedCards.map(c => c.rank) };
+            
+            // 패에서 제거
+            const toRem = selectedCards.map(c => c.idx).sort((a,b)=>b-a);
+            toRem.forEach(i => gameState.hands[myId].splice(i, 1));
+            
+            if(gameState.hands[myId].length === 0) alert("탈출 성공!");
+
+            gameState.passCount = 0;
+            nextTurn();
+        } else {
+            alert("조건이 맞지 않습니다.");
+        }
+    }
+
+    function passTurn() {
+        gameState.passCount++;
+        if(gameState.passCount >= gameState.players.length - 1) {
+            gameState.lastPlayed = { rank: 14, count: 0, cards: [] };
+            gameState.passCount = 0;
+        }
+        nextTurn();
+    }
+
+    function nextTurn() {
+        gameState.turnIdx = (gameState.turnIdx + 1) % gameState.players.length;
+        room.get('state').put(JSON.stringify(gameState));
+    }
+
+    function showScreen(id) {
+        ['setup-screen', 'lobby-screen', 'game-screen'].forEach(s => document.getElementById(s).classList.add('hidden'));
+        document.getElementById(id).classList.remove('hidden');
+    }
+</script>
+</body>
+</html>
