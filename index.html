@@ -13,10 +13,27 @@
         .screen { background: rgba(0,0,0,0.7); padding: 20px; border-radius: 15px; max-width: 500px; margin: 10px auto; border: 1px solid #34495e; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         .card-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 15px; min-height: 110px; }
         .card { 
-            width: 65px; height: 95px; background: var(--card-bg); border-radius: 8px; 
-            border: 2px solid #333; cursor: pointer; display: flex; align-items: center; 
-            justify-content: center; color: #2c3e50; font-weight: bold; font-size: 28px;
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s;
+            /* 화면 너비에 맞춰 5장이 들어가도록 너비를 18% 정도로 설정합니다. */
+            width: 18vw; 
+            /* 너비에 비례해서 높이도 적절히 조절합니다 (기존 70px -> 25vw 가량) */
+            height: 26vw; 
+            background: white; 
+            border: 2px solid #333; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: #2c3e50;
+            font-weight: bold;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 글자 크기도 카드 크기에 맞춰 조금 줄여주면 더 예쁩니다. */
+        .card-number { 
+            font-size: 5.5vw; 
+            z-index: 1; 
         }
         .card.selected { transform: translateY(-15px); border: 3px solid #e67e22; background: #fff9e6; }
         .card.disabled { opacity: 0.6; cursor: default; background: #bdc3c7; color: #7f8c8d; }
