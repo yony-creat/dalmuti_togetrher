@@ -96,19 +96,7 @@
         if (room) document.getElementById('join-id').value = room;
     };
 
-    function copyRoomLink() {
-        const link = `${window.location.origin}${window.location.pathname}?room=${myID}`;
-        navigator.clipboard.writeText(link).then(() => alert("링크가 복사되었습니다!"));
-    }
-
-    function updateLobby() {
-        const list = document.getElementById('player-list-lobby');
-        list.innerHTML = players.map(p => `<div>👤 ${p.name} ${p.id === myID ? '(나)' : ''}</div>`).join('');
-        if(isHost && players.length >= 2) {
-            document.getElementById('start-btn').classList.remove('hidden');
-        }
-    }
-    function initPeer(host) {
+function initPeer(host) {
         myName = document.getElementById('my-name').value.trim();
         if (!myName) return alert("이름을 입력하세요!");
         isHost = host;
@@ -117,15 +105,38 @@
             myID = id;
             document.getElementById('status-bar').innerText = isHost ? "방장이 되었습니다" : "연결됨";
             document.getElementById('status-bar').classList.add('online');
+            
+            // 방 코드를 화면에 표시하는 코드 추가 (없으면 접속 불가)
+            const codeDisplay = document.getElementById('display-room-code');
+            if (codeDisplay) codeDisplay.innerText = id;
+
             if(isHost) {
-                players.push({id, name:myName, hand:[], isFinished:false});
-                showScreen('lobby'); updateLobby();
+                players = [{id, name:myName, hand:[], isFinished:false}];
+                showScreen('lobby'); 
+                updateLobby();
             } else {
-                conn = peer.connect(document.getElementById('join-id').value.trim());
+                const targetID = document.getElementById('join-id').value.trim();
+                if(!targetID) return alert("방 코드를 입력하세요!");
+                conn = peer.connect(targetID);
                 setupConn(conn);
+                showScreen('lobby');
             }
         });
         peer.on('connection', setupConn);
+    } // <--- ★ initPeer는 여기서 정확히 끝나야 합니다!
+
+    function copyRoomLink() {
+        const link = `${window.location.origin}${window.location.pathname}?room=${myID}`;
+        navigator.clipboard.writeText(link).then(() => alert("링크가 복사되었습니다!"));
+    }
+
+    function updateLobby() {
+        const list = document.getElementById('player-list-lobby');
+        if(!list) return;
+        list.innerHTML = players.map(p => `<div>👤 ${p.name} ${p.id === myID ? '(나)' : ''}</div>`).join('');
+        if(isHost && players.length >= 2) {
+            document.getElementById('start-btn').classList.remove('hidden');
+        }
     }
 
     function setupConn(c) {
